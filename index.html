@@ -9,9 +9,12 @@
   </style>
 </head>
 <body>
+  <!-- 1. Load Three.js first -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/loaders/GLTFLoader.js"></script>
+
+  <!-- 2. Then load controls and loaders (they extend global THREE scope) -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/loaders/GLTFLoader.js"></script>
 
   <script>
     const scene = new THREE.Scene();
@@ -24,6 +27,7 @@
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
+    // ✅ This is CORRECT (no "THREE.")
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
 
