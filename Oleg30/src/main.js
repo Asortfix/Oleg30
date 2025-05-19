@@ -9,6 +9,7 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
 
 
+
 // Camera orbit control variables
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
 let camOrbitRadius = 5;
@@ -17,6 +18,97 @@ let camOrbitAngle = 0; // horizontal angle (radians)
 let camOrbitVAngle = 0.2; // vertical angle (radians)
 let isDragging = false;
 let lastMouseX = 0, lastMouseY = 0;
+
+
+// Maze map (1 = wall, 0 = path)
+// Example 15x10 maze (you can expand this to match your image more closely)
+const mazeMap = [
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,0,0,1,0,1,0,0,0,1,0,0,0,1,0,1,0,0,0,1],
+  [1,1,0,1,0,1,0,1,0,1,1,1,0,1,0,1,1,1,0,1],
+  [1,0,0,0,0,1,0,1,0,0,0,1,0,0,0,0,0,1,0,1],
+  [1,0,1,1,0,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1],
+  [1,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,1],
+  [1,1,0,1,1,1,0,1,0,1,1,1,1,1,0,1,1,1,0,1],
+  [1,0,0,0,0,1,0,1,0,0,0,0,0,1,0,0,0,1,0,1],
+  [1,0,1,1,0,1,0,1,1,1,1,1,0,1,1,1,0,1,1,1],
+  [1,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+];
+const mazeRows = mazeMap.length;
+const mazeCols = mazeMap[0].length;
+const mazeTileSize = 2;
+
+let doors = [];
+const doorWidth = 1.5;
+const doorHeight = 2.5;
+const doorDepth = 0.2;
+
+// UI for door action
+let doorActionDiv = document.createElement('div');
+doorActionDiv.style.position = 'absolute';
+doorActionDiv.style.top = '50%';
+doorActionDiv.style.left = '50%';
+doorActionDiv.style.transform = 'translate(-50%, -50%)';
+doorActionDiv.style.padding = '16px 32px';
+doorActionDiv.style.background = 'rgba(0,0,0,0.7)';
+doorActionDiv.style.color = '#fff';
+doorActionDiv.style.fontSize = '2em';
+doorActionDiv.style.display = 'none';
+doorActionDiv.style.zIndex = '10';
+doorActionDiv.innerText = 'Press F to open the door';
+document.body.appendChild(doorActionDiv);
+
+function addMaze() {
+  // Floor
+  const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+  const blackMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+  for (let row = 0; row < mazeRows; row++) {
+    for (let col = 0; col < mazeCols; col++) {
+      const isWhite = (row + col) % 2 === 0;
+      const tile = new THREE.Mesh(
+        new THREE.BoxGeometry(mazeTileSize, 0.05, mazeTileSize),
+        isWhite ? whiteMat : blackMat
+      );
+      tile.position.set(
+        (col - mazeCols / 2) * mazeTileSize + mazeTileSize / 2,
+        0,
+        (row - mazeRows / 2) * mazeTileSize + mazeTileSize / 2
+      );
+      scene.add(tile);
+    }
+  }
+  // Walls
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0x444444 });
+  for (let row = 0; row < mazeRows; row++) {
+    for (let col = 0; col < mazeCols; col++) {
+      if (mazeMap[row][col] === 1) {
+        const wall = new THREE.Mesh(
+          new THREE.BoxGeometry(mazeTileSize, 2.5, mazeTileSize),
+          wallMat
+        );
+        wall.position.set(
+          (col - mazeCols / 2) * mazeTileSize + mazeTileSize / 2,
+          1.25,
+          (row - mazeRows / 2) * mazeTileSize + mazeTileSize / 2
+        );
+        scene.add(wall);
+      }
+    }
+  }
+}
+
+function addDoors() {
+  for (let i = doorInterval; i < corridorLength; i += doorInterval) {
+    const doorGeo = new THREE.BoxGeometry(doorWidth, doorHeight, doorDepth);
+    const doorMat = new THREE.MeshStandardMaterial({ color: 0x663300 });
+    const door = new THREE.Mesh(doorGeo, doorMat);
+    door.position.set(0, doorHeight/2, -i);
+    door.userData.isOpen = false;
+    scene.add(door);
+    doors.push(door);
+  }
+}
 
 function updateCameraPosition() {
   if (!model) return;
@@ -57,7 +149,7 @@ const dirLight = new THREE.DirectionalLight(0xffffff, 1);
 dirLight.position.set(5, 10, 5);
 scene.add(dirLight);
 
-addChessFloor();
+addMaze();
 
 let model, mixer;
 let runAction, currentAction;
@@ -114,17 +206,36 @@ function switchToRun(play) {
 
 // Обработка клавиш
 
+
 window.addEventListener('keydown', e => {
   if (!model) return;
 
-  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) {
-    pressed.add(e.code);
-    // Determine movement angle based on key and camera angle
-    let angleOffset = 0;
-    if (e.code === "ArrowUp") angleOffset = 0;
-    else if (e.code === "ArrowDown") angleOffset = Math.PI;
-    else if (e.code === "ArrowLeft") angleOffset = Math.PI / 2;
-    else if (e.code === "ArrowRight") angleOffset = -Math.PI / 2;
+  // Support both arrows and WASD
+  let code = e.code;
+  if (code === 'KeyW') code = 'ArrowUp';
+  if (code === 'KeyS') code = 'ArrowDown';
+  if (code === 'KeyA') code = 'ArrowLeft';
+  if (code === 'KeyD') code = 'ArrowRight';
+
+  // Diagonal movement support
+  const up = pressed.has('ArrowUp') || code === 'ArrowUp';
+  const down = pressed.has('ArrowDown') || code === 'ArrowDown';
+  const left = pressed.has('ArrowLeft') || code === 'ArrowLeft';
+  const right = pressed.has('ArrowRight') || code === 'ArrowRight';
+
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(code)) {
+    pressed.add(code);
+    let angleOffset = null;
+    if (up && !down && !left && !right) angleOffset = 0;
+    else if (down && !up && !left && !right) angleOffset = Math.PI;
+    else if (left && !right && !up && !down) angleOffset = Math.PI / 2;
+    else if (right && !left && !up && !down) angleOffset = -Math.PI / 2;
+    else if (up && left && !right && !down) angleOffset = Math.PI / 4;
+    else if (up && right && !left && !down) angleOffset = -Math.PI / 4;
+    else if (down && left && !right && !up) angleOffset = (3 * Math.PI) / 4;
+    else if (down && right && !left && !up) angleOffset = (-3 * Math.PI) / 4;
+    // Default to forward if something goes wrong
+    if (angleOffset === null) angleOffset = 0;
     moveAngle = camOrbitAngle + angleOffset;
     model.rotation.y = moveAngle + modelBaseRotation;
     switchToRun(true);
@@ -134,24 +245,41 @@ window.addEventListener('keydown', e => {
     isJumping = true;
     velocityY = jumpPower;
   }
+
+  // Door open action
+  if (e.code === 'KeyF' && doorActionDiv.style.display === 'block' && nearestDoor) {
+    openDoor(nearestDoor);
+    doorActionDiv.style.display = 'none';
+  }
 });
 
 window.addEventListener('keyup', e => {
   if (!model) return;
 
-  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
-    pressed.delete(e.code);
+  // Support both arrows and WASD
+  let code = e.code;
+  if (code === 'KeyW') code = 'ArrowUp';
+  if (code === 'KeyS') code = 'ArrowDown';
+  if (code === 'KeyA') code = 'ArrowLeft';
+  if (code === 'KeyD') code = 'ArrowRight';
+
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(code)) {
+    pressed.delete(code);
     if (pressed.size === 0) {
       switchToRun(false);
-    } else {
-      updateMovementDirection();
     }
   }
 });
 
 // Вычисление направления движения с учётом комбинации клавиш
 
-// updateMovementDirection is no longer needed, movement is now based on camera angle
+
+// Door logic (not used in maze mode)
+let nearestDoor = null;
+function checkDoorProximity() {
+  doorActionDiv.style.display = 'none';
+}
+function openDoor(door) {}
 
 let coins = [];
 let score = 0;
@@ -189,7 +317,8 @@ function checkCoinCollection() {
   }
 }
 
-addCoins(15); // Добавить 15 монет
+
+//addCoins(15); // Отключаем монеты для коридора
 
 function animate() {
   requestAnimationFrame(animate);
@@ -198,10 +327,50 @@ function animate() {
 
   // Движение модели
   if (model && pressed.size > 0) {
+    // Determine which direction(s) are currently pressed
+    const up = pressed.has('ArrowUp');
+    const down = pressed.has('ArrowDown');
+    const left = pressed.has('ArrowLeft');
+    const right = pressed.has('ArrowRight');
+    let angleOffset = null;
+    if (up && !down && !left && !right) angleOffset = 0;
+    else if (down && !up && !left && !right) angleOffset = Math.PI;
+    else if (left && !right && !up && !down) angleOffset = Math.PI / 2;
+    else if (right && !left && !up && !down) angleOffset = -Math.PI / 2;
+    else if (up && left && !right && !down) angleOffset = Math.PI / 4;
+    else if (up && right && !left && !down) angleOffset = -Math.PI / 4;
+    else if (down && left && !right && !up) angleOffset = (3 * Math.PI) / 4;
+    else if (down && right && !left && !up) angleOffset = (-3 * Math.PI) / 4;
+    // Default to forward if something goes wrong
+    if (angleOffset === null) angleOffset = 0;
+
+    // Calculate intended next position
     const moveDir = new THREE.Vector3(0, 0, -1);
-    moveDir.applyAxisAngle(new THREE.Vector3(0, 1, 0), moveAngle);
-    moveDir.multiplyScalar(moveSpeed * delta);
-    model.position.add(moveDir);
+    moveDir.applyAxisAngle(new THREE.Vector3(0, 1, 0), camOrbitAngle + angleOffset);
+    moveDir.normalize();
+    const nextPos = model.position.clone().add(moveDir.clone().multiplyScalar(mazeTileSize * 0.4));
+
+    // Convert world position to maze grid
+    const gridX = Math.round((nextPos.x + (mazeCols * mazeTileSize) / 2 - mazeTileSize / 2) / mazeTileSize);
+    const gridZ = Math.round((nextPos.z + (mazeRows * mazeTileSize) / 2 - mazeTileSize / 2) / mazeTileSize);
+
+    // Check for wall collision
+    let canMove = true;
+    if (
+      gridZ >= 0 && gridZ < mazeRows &&
+      gridX >= 0 && gridX < mazeCols &&
+      mazeMap[gridZ][gridX] === 1
+    ) {
+      canMove = false;
+    }
+
+    // Always face the direction, even if can't move
+    model.rotation.y = camOrbitAngle + angleOffset + modelBaseRotation;
+
+    if (canMove) {
+      moveDir.multiplyScalar(moveSpeed * delta);
+      model.position.add(moveDir);
+    }
   }
 
   // Прыжок
@@ -216,7 +385,10 @@ function animate() {
     }
   }
 
-  checkCoinCollection(); // Проверка сбора монет
+
+  //checkCoinCollection(); // Отключаем монеты для коридора
+
+  checkDoorProximity();
 
   // Камера следует за мышью
   updateCameraPosition();
