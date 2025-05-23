@@ -1,3 +1,36 @@
+// Photo reveal counter UI
+let photoCounterDiv = document.createElement('div');
+photoCounterDiv.style.position = 'absolute';
+photoCounterDiv.style.top = '10px';
+photoCounterDiv.style.right = '10px';
+photoCounterDiv.style.fontFamily = 'sans-serif';
+photoCounterDiv.style.fontSize = '24px';
+photoCounterDiv.style.color = '#fff';
+photoCounterDiv.style.textShadow = '1px 1px 2px #000';
+photoCounterDiv.style.zIndex = '10';
+photoCounterDiv.textContent = 'Photos: 0/0';
+document.body.appendChild(photoCounterDiv);
+
+function updatePhotoCounter() {
+  const total = photoWalls.length;
+  const revealed = photoWalls.filter(w => w.userData.revealed).length;
+  photoCounterDiv.textContent = `Photos: ${revealed}/${total}`;
+}
+// Helper: find nearest photo wall within distance
+function getNearestPhotoWall(maxDist = 2.5) {
+  if (!model) return null;
+  let nearest = null;
+  let minDist = maxDist;
+  for (const wall of photoWalls) {
+    if (wall.userData.revealed) continue;
+    const dist = model.position.distanceTo(wall.position);
+    if (dist < minDist) {
+      minDist = dist;
+      nearest = wall;
+    }
+  }
+  return nearest;
+}
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
@@ -45,6 +78,7 @@ const doorHeight = 2.5;
 const doorDepth = 0.2;
 
 // UI for door action
+
 let doorActionDiv = document.createElement('div');
 doorActionDiv.style.position = 'absolute';
 doorActionDiv.style.top = '50%';
@@ -59,7 +93,28 @@ doorActionDiv.style.zIndex = '10';
 doorActionDiv.innerText = 'Press F to open the door';
 document.body.appendChild(doorActionDiv);
 
+// UI for photo wall action
+let photoWallActionDiv = document.createElement('div');
+photoWallActionDiv.style.position = 'absolute';
+photoWallActionDiv.style.top = '55%';
+photoWallActionDiv.style.left = '50%';
+photoWallActionDiv.style.transform = 'translate(-50%, -50%)';
+photoWallActionDiv.style.padding = '16px 32px';
+photoWallActionDiv.style.background = 'rgba(0,0,0,0.7)';
+photoWallActionDiv.style.color = '#fff';
+photoWallActionDiv.style.fontSize = '2em';
+photoWallActionDiv.style.display = 'none';
+photoWallActionDiv.style.zIndex = '10';
+photoWallActionDiv.innerText = 'Press F to reveal photo';
+document.body.appendChild(photoWallActionDiv);
+
+// Store special photo walls for interaction
+let photoWalls = [];
+
+
 function addMaze() {
+  // Reset photoWalls for new maze
+  photoWalls.length = 0;
   // Floor
   const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
   const blackMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
@@ -78,14 +133,85 @@ function addMaze() {
       scene.add(tile);
     }
   }
-  // Walls
+
+  // Walls with optional photo textures (hidden by question.png)
   const wallMat = new THREE.MeshStandardMaterial({ color: 0x444444 });
+  // let photoTextures = [];
+  // let photoFiles = [];
+  // let photoIndex = 0;
+  const questionTexture = new THREE.TextureLoader().load('/photos/question.png');
+
+  // Get photo file names from the workspace (preliminary, static list)
+  const photoFileNames = [
+    "photo_2025-04-27_22-34-08.jpg",
+    "photo_2025-04-27_22-35-22.jpg",
+    "photo_2025-04-27_22-37-04 (2).jpg",
+    "photo_2025-04-27_22-37-04.jpg",
+    "photo_2025-04-27_22-38-19.jpg",
+    "photo_2025-04-27_22-39-09.jpg",
+    "photo_2025-04-27_22-39-24.jpg",
+    "photo_2025-05-23_21-10-25 (2).jpg",
+    "photo_2025-05-23_21-10-25 (3).jpg",
+    "photo_2025-05-23_21-10-25 (4).jpg",
+    "photo_2025-05-23_21-10-25 (5).jpg",
+    "photo_2025-05-23_21-10-25 (6).jpg",
+    "photo_2025-05-23_21-10-25 (7).jpg",
+    "photo_2025-05-23_21-10-25 (8).jpg",
+    "photo_2025-05-23_21-10-25.jpg",
+    "photo_2025-05-23_21-10-26 (10).jpg",
+    "photo_2025-05-23_21-10-26 (11).jpg",
+    "photo_2025-05-23_21-10-26 (2).jpg",
+    "photo_2025-05-23_21-10-26 (3).jpg",
+    "photo_2025-05-23_21-10-26 (4).jpg",
+    "photo_2025-05-23_21-10-26 (5).jpg",
+    "photo_2025-05-23_21-10-26 (6).jpg",
+    "photo_2025-05-23_21-10-26 (7).jpg",
+    "photo_2025-05-23_21-10-26 (8).jpg",
+    "photo_2025-05-23_21-10-26 (9).jpg",
+    "photo_2025-05-23_21-10-26.jpg",
+    "photo_2025-05-23_21-10-27 (2).jpg",
+    "photo_2025-05-23_21-10-27 (3).jpg",
+    "photo_2025-05-23_21-10-27 (4).jpg",
+    "photo_2025-05-23_21-10-27 (5).jpg",
+    "photo_2025-05-23_21-10-27 (6).jpg",
+    "photo_2025-05-23_21-10-27.jpg",
+    "photo_2025-05-23_21-16-35.jpg",
+    "photo_2025-05-23_21-33-52 (2).jpg",
+    "photo_2025-05-23_21-33-52.jpg",
+    "photo_2025-05-23_21-34-21.jpg",
+    "photo_2025-05-23_21-34-40.jpg"
+  ];
+  let photoTextures = photoFileNames.map(f => {
+    const tex = new THREE.TextureLoader().load('/photos/' + f);
+    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    tex.minFilter = THREE.LinearFilter;
+    return tex;
+  });
+  let photoIndex = 0;
+
+  // Only build walls after textures are loaded
   for (let row = 0; row < mazeRows; row++) {
     for (let col = 0; col < mazeCols; col++) {
       if (mazeMap[row][col] === 1) {
+        // Only horizontal walls (let's say those with even row or col)
+        let isPhotoWall = false;
+        let photoTex = null;
+        let origPhotoIndex = null;
+        if (photoTextures.length > 0 && Math.random() < 0.3 && (row % 2 === 0 || col % 2 === 0)) {
+          isPhotoWall = true;
+          origPhotoIndex = photoIndex % photoTextures.length;
+          photoTex = photoTextures[origPhotoIndex];
+          photoIndex++;
+        }
+        let mat;
+        if (isPhotoWall) {
+          mat = new THREE.MeshStandardMaterial({ map: questionTexture });
+        } else {
+          mat = wallMat;
+        }
         const wall = new THREE.Mesh(
           new THREE.BoxGeometry(mazeTileSize, 2.5, mazeTileSize),
-          wallMat
+          mat
         );
         wall.position.set(
           (col - mazeCols / 2) * mazeTileSize + mazeTileSize / 2,
@@ -93,9 +219,17 @@ function addMaze() {
           (row - mazeRows / 2) * mazeTileSize + mazeTileSize / 2
         );
         scene.add(wall);
+        if (isPhotoWall) {
+          wall.userData.isPhotoWall = true;
+          wall.userData.revealed = false;
+          wall.userData.photoTexture = photoTex;
+          photoWalls.push(wall);
+          updatePhotoCounter();
+        }
       }
     }
   }
+  updatePhotoCounter();
 }
 
 function addDoors() {
@@ -122,27 +256,18 @@ function updateCameraPosition() {
   camera.lookAt(model.position.x, model.position.y + 1, model.position.z);
 }
 
-canvas.addEventListener('mousedown', (e) => {
-  isDragging = true;
-  lastMouseX = e.clientX;
-  lastMouseY = e.clientY;
-});
-window.addEventListener('mouseup', () => { isDragging = false; });
+// Camera always rotates with mouse movement (no click needed)
 window.addEventListener('mousemove', (e) => {
-  if (!isDragging) return;
-  const dx = e.clientX - lastMouseX;
-  const dy = e.clientY - lastMouseY;
-  lastMouseX = e.clientX;
-  lastMouseY = e.clientY;
+  const dx = e.movementX || e.mozMovementX || e.webkitMovementX || 0;
+  const dy = e.movementY || e.mozMovementY || e.webkitMovementY || 0;
   camOrbitAngle -= dx * 0.01;
   camOrbitVAngle -= dy * 0.01;
 });
 
-// Optional: zoom with mouse wheel
-canvas.addEventListener('wheel', (e) => {
-  camOrbitRadius += e.deltaY * 0.01;
-  camOrbitRadius = Math.max(2, Math.min(15, camOrbitRadius));
-});
+
+// Disable zooming with mouse wheel
+// Set camera to maximum close by default
+camOrbitRadius = 2;
 
 scene.add(new THREE.HemisphereLight(0xffffee, 0x444444, 1));
 const dirLight = new THREE.DirectionalLight(0xffffff, 1);
@@ -251,6 +376,17 @@ window.addEventListener('keydown', e => {
     openDoor(nearestDoor);
     doorActionDiv.style.display = 'none';
   }
+
+  // Photo wall reveal action
+  if (e.code === 'KeyF' && photoWallActionDiv.style.display === 'block' && nearestPhotoWall) {
+    if (!nearestPhotoWall.userData.revealed) {
+      nearestPhotoWall.material.map = nearestPhotoWall.userData.photoTexture;
+      nearestPhotoWall.material.needsUpdate = true;
+      nearestPhotoWall.userData.revealed = true;
+      photoWallActionDiv.style.display = 'none';
+      updatePhotoCounter();
+    }
+  }
 });
 
 window.addEventListener('keyup', e => {
@@ -276,8 +412,16 @@ window.addEventListener('keyup', e => {
 
 // Door logic (not used in maze mode)
 let nearestDoor = null;
+let nearestPhotoWall = null;
 function checkDoorProximity() {
   doorActionDiv.style.display = 'none';
+  // Photo wall proximity
+  nearestPhotoWall = getNearestPhotoWall();
+  if (nearestPhotoWall) {
+    photoWallActionDiv.style.display = 'block';
+  } else {
+    photoWallActionDiv.style.display = 'none';
+  }
 }
 function openDoor(door) {}
 
@@ -419,3 +563,16 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
+
+// Camera auto-follow: smoothly rotate camera to stay behind the character
+  if (model && pressed.size > 0) {
+    // moveAngle is set to the direction of movement
+    // Smoothly interpolate camOrbitAngle towards moveAngle
+    const lerpSpeed = 0.08; // adjust for smoothness
+    let targetAngle = moveAngle;
+    // Normalize angles to avoid sudden jumps
+    let deltaAngle = targetAngle - camOrbitAngle;
+    while (deltaAngle > Math.PI) deltaAngle -= 2 * Math.PI;
+    while (deltaAngle < -Math.PI) deltaAngle += 2 * Math.PI;
+    camOrbitAngle += deltaAngle * lerpSpeed;
+  }
