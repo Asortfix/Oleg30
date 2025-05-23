@@ -53,24 +53,101 @@ let isDragging = false;
 let lastMouseX = 0, lastMouseY = 0;
 
 
-// Maze map (1 = wall, 0 = path)
-// Example 15x10 maze (you can expand this to match your image more closely)
-const mazeMap = [
-  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-  [1,0,0,1,0,1,0,0,0,1,0,0,0,1,0,1,0,0,0,1],
-  [1,1,0,1,0,1,0,1,0,1,1,1,0,1,0,1,1,1,0,1],
-  [1,0,0,0,0,1,0,1,0,0,0,1,0,0,0,0,0,1,0,1],
-  [1,0,1,1,0,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1],
-  [1,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,1],
-  [1,1,0,1,1,1,0,1,0,1,1,1,1,1,0,1,1,1,0,1],
-  [1,0,0,0,0,1,0,1,0,0,0,0,0,1,0,0,0,1,0,1],
-  [1,0,1,1,0,1,0,1,1,1,1,1,0,1,1,1,0,1,1,1],
-  [1,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1],
-  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+
+// Static maze, expanded 3x in both dimensions
+// Hardcoded photo file names from /public/photos (auto-generated)
+const photoFileNames = [
+  "photo_2025-04-27_22-34-08.jpg",
+  "photo_2025-04-27_22-35-22.jpg",
+  "photo_2025-04-27_22-37-04 (2).jpg",
+  "photo_2025-04-27_22-37-04.jpg",
+  "photo_2025-04-27_22-38-19.jpg",
+  "photo_2025-04-27_22-39-09.jpg",
+  "photo_2025-04-27_22-39-24.jpg",
+  "photo_2025-05-23_21-10-25 (2).jpg",
+  "photo_2025-05-23_21-10-25 (3).jpg",
+  "photo_2025-05-23_21-10-25 (4).jpg",
+  "photo_2025-05-23_21-10-25 (5).jpg",
+  "photo_2025-05-23_21-10-25 (6).jpg",
+  "photo_2025-05-23_21-10-25 (7).jpg",
+  "photo_2025-05-23_21-10-25 (8).jpg",
+  "photo_2025-05-23_21-10-25.jpg",
+  "photo_2025-05-23_21-10-26 (10).jpg",
+  "photo_2025-05-23_21-10-26 (11).jpg",
+  "photo_2025-05-23_21-10-26 (2).jpg",
+  "photo_2025-05-23_21-10-26 (3).jpg",
+  "photo_2025-05-23_21-10-26 (4).jpg",
+  "photo_2025-05-23_21-10-26 (5).jpg",
+  "photo_2025-05-23_21-10-26 (6).jpg",
+  "photo_2025-05-23_21-10-26 (7).jpg",
+  "photo_2025-05-23_21-10-26 (8).jpg",
+  "photo_2025-05-23_21-10-26 (9).jpg",
+  "photo_2025-05-23_21-10-26.jpg",
+  "photo_2025-05-23_21-10-27 (2).jpg",
+  "photo_2025-05-23_21-10-27 (3).jpg",
+  "photo_2025-05-23_21-10-27 (4).jpg",
+  "photo_2025-05-23_21-10-27 (5).jpg",
+  "photo_2025-05-23_21-10-27 (6).jpg",
+  "photo_2025-05-23_21-10-27.jpg",
+  "photo_2025-05-23_21-16-35.jpg",
+  "photo_2025-05-23_21-33-52 (2).jpg",
+  "photo_2025-05-23_21-33-52.jpg",
+  "photo_2025-05-23_21-34-21.jpg",
+  "photo_2025-05-23_21-34-40.jpg",
+  "photo_2025-05-23_21-36-20.jpg",
+  "photo_2025-05-23_21-39-37.jpg",
+  "photo_2025-05-23_22-24-13 (2).jpg",
+  "photo_2025-05-23_22-24-13 (3).jpg",
+  "photo_2025-05-23_22-24-13 (4).jpg",
+  "photo_2025-05-23_22-24-13 (5).jpg",
+  "photo_2025-05-23_22-24-13 (6).jpg",
+  "photo_2025-05-23_22-24-13 (7).jpg",
+  "photo_2025-05-23_22-24-13 (8).jpg",
+  "photo_2025-05-23_22-24-13.jpg",
+  "photo_2025-05-23_22-24-14 (2).jpg",
+  "photo_2025-05-23_22-24-14 (3).jpg",
+  "photo_2025-05-23_22-24-14 (4).jpg",
+  "photo_2025-05-23_22-24-14 (5).jpg",
+  "photo_2025-05-23_22-24-14 (6).jpg",
+  "photo_2025-05-23_22-24-14 (7).jpg",
+  "photo_2025-05-23_22-24-14 (8).jpg",
+  "photo_2025-05-23_22-24-14 (9).jpg",
+  "photo_2025-05-23_22-24-14.jpg",
+  "photo_2025-05-23_22-24-24 (2).jpg",
+  "photo_2025-05-23_22-24-24.jpg"
 ];
-const mazeRows = mazeMap.length;
-const mazeCols = mazeMap[0].length;
+
 const mazeTileSize = 2;
+// Original static maze
+const baseMaze = [
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,0,0,1,0,1,0,0,0,1,0,0,0,1,0,1,0,0,0,0,0,1,0,1,0,0,0,1,0,0,0,1,0,1,0,0,0,1],
+  [1,1,0,1,0,1,0,1,0,1,1,1,0,1,0,1,1,1,0,1,0,1,0,1,0,1,0,1,1,1,0,1,0,1,1,1,0,1],
+  [1,0,0,0,0,1,0,1,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,1,0,0,0,1,0,0,0,0,0,1,0,1],
+  [1,0,1,1,0,1,1,1,1,1,0,1,1,1,1,1,0,1,1,0,1,1,0,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1],
+  [1,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,1],
+  [1,1,0,1,1,1,0,1,0,1,1,1,1,1,0,1,1,1,0,1,0,1,1,1,0,1,0,1,1,1,1,1,0,1,1,1,0,1],
+  [1,0,0,0,0,1,0,1,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,1,0,1,0,0,0,0,0,1,0,0,0,1,0,1],
+  [1,0,1,1,0,1,0,1,1,1,1,1,0,1,1,1,0,1,1,0,1,1,0,1,0,1,1,1,1,1,0,1,1,1,0,1,1,1],
+  [1,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+];
+const baseRows = baseMaze.length;
+const baseCols = baseMaze[0].length;
+const scale = 2; // 2x2 blocks for both walls and corridors
+const mazeRows = baseRows * scale;
+const mazeCols = baseCols * scale;
+// Expand each cell to a scale x scale block (2x2 for both walls and corridors)
+let mazeMap = Array.from({ length: mazeRows }, () => Array(mazeCols).fill(1));
+for (let r = 0; r < baseRows; r++) {
+  for (let c = 0; c < baseCols; c++) {
+    for (let dr = 0; dr < scale; dr++) {
+      for (let dc = 0; dc < scale; dc++) {
+        mazeMap[r * scale + dr][c * scale + dc] = baseMaze[r][c];
+      }
+    }
+  }
+}
 
 let doors = [];
 const doorWidth = 1.5;
@@ -112,6 +189,7 @@ document.body.appendChild(photoWallActionDiv);
 let photoWalls = [];
 
 
+
 function addMaze() {
   // Reset photoWalls for new maze
   photoWalls.length = 0;
@@ -136,72 +214,84 @@ function addMaze() {
 
   // Walls with optional photo textures (hidden by question.png)
   const wallMat = new THREE.MeshStandardMaterial({ color: 0x444444 });
-  // let photoTextures = [];
-  // let photoFiles = [];
-  // let photoIndex = 0;
   const questionTexture = new THREE.TextureLoader().load('/photos/question.png');
-
-  // Get photo file names from the workspace (preliminary, static list)
-  const photoFileNames = [
-    "photo_2025-04-27_22-34-08.jpg",
-    "photo_2025-04-27_22-35-22.jpg",
-    "photo_2025-04-27_22-37-04 (2).jpg",
-    "photo_2025-04-27_22-37-04.jpg",
-    "photo_2025-04-27_22-38-19.jpg",
-    "photo_2025-04-27_22-39-09.jpg",
-    "photo_2025-04-27_22-39-24.jpg",
-    "photo_2025-05-23_21-10-25 (2).jpg",
-    "photo_2025-05-23_21-10-25 (3).jpg",
-    "photo_2025-05-23_21-10-25 (4).jpg",
-    "photo_2025-05-23_21-10-25 (5).jpg",
-    "photo_2025-05-23_21-10-25 (6).jpg",
-    "photo_2025-05-23_21-10-25 (7).jpg",
-    "photo_2025-05-23_21-10-25 (8).jpg",
-    "photo_2025-05-23_21-10-25.jpg",
-    "photo_2025-05-23_21-10-26 (10).jpg",
-    "photo_2025-05-23_21-10-26 (11).jpg",
-    "photo_2025-05-23_21-10-26 (2).jpg",
-    "photo_2025-05-23_21-10-26 (3).jpg",
-    "photo_2025-05-23_21-10-26 (4).jpg",
-    "photo_2025-05-23_21-10-26 (5).jpg",
-    "photo_2025-05-23_21-10-26 (6).jpg",
-    "photo_2025-05-23_21-10-26 (7).jpg",
-    "photo_2025-05-23_21-10-26 (8).jpg",
-    "photo_2025-05-23_21-10-26 (9).jpg",
-    "photo_2025-05-23_21-10-26.jpg",
-    "photo_2025-05-23_21-10-27 (2).jpg",
-    "photo_2025-05-23_21-10-27 (3).jpg",
-    "photo_2025-05-23_21-10-27 (4).jpg",
-    "photo_2025-05-23_21-10-27 (5).jpg",
-    "photo_2025-05-23_21-10-27 (6).jpg",
-    "photo_2025-05-23_21-10-27.jpg",
-    "photo_2025-05-23_21-16-35.jpg",
-    "photo_2025-05-23_21-33-52 (2).jpg",
-    "photo_2025-05-23_21-33-52.jpg",
-    "photo_2025-05-23_21-34-21.jpg",
-    "photo_2025-05-23_21-34-40.jpg"
-  ];
   let photoTextures = photoFileNames.map(f => {
     const tex = new THREE.TextureLoader().load('/photos/' + f);
     tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
     tex.minFilter = THREE.LinearFilter;
     return tex;
   });
-  let photoIndex = 0;
 
-  // Only build walls after textures are loaded
+  // Find all eligible horizontal wall positions (between two open 2x2 corridor blocks)
+  let eligiblePhotoWalls = [];
+  // Only check horizontal walls between two open corridors
+  for (let row = 0; row < mazeRows - scale; row++) {
+    for (let col = 0; col < mazeCols; col++) {
+      // Check if this 2x2 block is a wall
+      let isWallBlock = true;
+      for (let dr = 0; dr < scale; dr++) {
+        for (let dc = 0; dc < scale; dc++) {
+          if (mazeMap[row + dr][col + dc] !== 1) isWallBlock = false;
+        }
+      }
+      if (!isWallBlock) continue;
+      // Check above and below for open 2x2 corridor blocks
+      let aboveOpen = true, belowOpen = true;
+      if (row - scale >= 0) {
+        for (let dr = 0; dr < scale; dr++) {
+          for (let dc = 0; dc < scale; dc++) {
+            if (mazeMap[row - scale + dr][col + dc] !== 0) aboveOpen = false;
+          }
+        }
+      } else {
+        aboveOpen = false;
+      }
+      if (row + scale < mazeRows - scale + 1) {
+        for (let dr = 0; dr < scale; dr++) {
+          for (let dc = 0; dc < scale; dc++) {
+            if (mazeMap[row + scale + dr][col + dc] !== 0) belowOpen = false;
+          }
+        }
+      } else {
+        belowOpen = false;
+      }
+      // Only allow if both above and below are open corridors
+      if (aboveOpen && belowOpen) {
+        // Place photo wall at the center of this wall block
+        const centerRow = row + Math.floor(scale / 2);
+        const centerCol = col + Math.floor(scale / 2);
+        eligiblePhotoWalls.push({ row: centerRow, col: centerCol });
+      }
+    }
+  }
+
+  // Shuffle and pick as many as there are photos
+  function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+  eligiblePhotoWalls = shuffle(eligiblePhotoWalls);
+  const selectedPhotoWalls = eligiblePhotoWalls.slice(0, photoTextures.length);
+
+  // Map for quick lookup
+  const photoWallMap = new Map();
+  selectedPhotoWalls.forEach((pos, i) => {
+    photoWallMap.set(`${pos.row},${pos.col}`, i);
+  });
+
+  // Build walls
   for (let row = 0; row < mazeRows; row++) {
     for (let col = 0; col < mazeCols; col++) {
       if (mazeMap[row][col] === 1) {
-        // Only horizontal walls (let's say those with even row or col)
         let isPhotoWall = false;
         let photoTex = null;
-        let origPhotoIndex = null;
-        if (photoTextures.length > 0 && Math.random() < 0.3 && (row % 2 === 0 || col % 2 === 0)) {
+        let photoIdx = photoWallMap.get(`${row},${col}`);
+        if (photoIdx !== undefined) {
           isPhotoWall = true;
-          origPhotoIndex = photoIndex % photoTextures.length;
-          photoTex = photoTextures[origPhotoIndex];
-          photoIndex++;
+          photoTex = photoTextures[photoIdx];
         }
         let mat;
         if (isPhotoWall) {
@@ -224,7 +314,6 @@ function addMaze() {
           wall.userData.revealed = false;
           wall.userData.photoTexture = photoTex;
           photoWalls.push(wall);
-          updatePhotoCounter();
         }
       }
     }
@@ -290,7 +379,9 @@ const gravity = -20;
 const jumpPower = 7;
 let groundY = 0;
 
-const moveSpeed = 3;
+const baseMoveSpeed = 3;
+const sprintMoveSpeed = 7;
+let moveSpeed = baseMoveSpeed;
 
 // Загрузка модели
 new GLTFLoader().load('/OlegRunning.glb', gltf => {
@@ -333,6 +424,10 @@ function switchToRun(play) {
 
 
 window.addEventListener('keydown', e => {
+  // Sprint run
+  if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+    moveSpeed = sprintMoveSpeed;
+  }
   if (!model) return;
 
   // Support both arrows and WASD
@@ -390,6 +485,10 @@ window.addEventListener('keydown', e => {
 });
 
 window.addEventListener('keyup', e => {
+  // Stop sprint
+  if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+    moveSpeed = baseMoveSpeed;
+  }
   if (!model) return;
 
   // Support both arrows and WASD
