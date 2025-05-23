@@ -21,7 +21,7 @@ startMenuDiv.style.justifyContent = 'center';
 startMenuDiv.style.alignItems = 'center';
 startMenuDiv.style.zIndex = '1000';
 startMenuDiv.innerHTML = `
-  <img src="/photos/OlegOriginal.jpg" alt="OlegOriginal" style="max-width:40vw;max-height:40vh;border-radius:16px;box-shadow:0 0 32px #000;margin-bottom:32px;">
+  <img src="/photos/OlegOriginal.jpg" alt="OlegOriginal" style="max-width:80vw;max-height:80vh;border-radius:16px;box-shadow:0 0 32px #000;margin-bottom:32px;">
   <div style="color:#fff;font-size:2.5em;text-shadow:2px 2px 8px #000;margin-bottom:32px;">Хочешь попасть в игру?</div>
   <button id="menu-yes-btn" style="font-size:2em;padding:0.5em 2em;margin-bottom:16px;">ДА</button>
 `;
@@ -238,19 +238,12 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
 
-
-
-
-// Camera orbit control variables (classic smooth system)
+// Camera orbit control variables
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
 let camOrbitRadius = 5;
 let camOrbitY = 2.5; // height above character
 let camOrbitAngle = 0; // horizontal angle (radians)
 let camOrbitVAngle = 0.2; // vertical angle (radians)
-let isDragging = false;
-let lastMouseX = 0, lastMouseY = 0;
-
-
 
 // Static maze, expanded 3x in both dimensions
 // Hardcoded photo file names from /public/photos (auto-generated)
@@ -347,9 +340,6 @@ for (let r = 0; r < baseRows; r++) {
   }
 }
 
-
-
-
 // UI for photo wall action
 let photoWallActionDiv = document.createElement('div');
 photoWallActionDiv.style.position = 'absolute';
@@ -367,8 +357,6 @@ document.body.appendChild(photoWallActionDiv);
 
 // Store special photo walls for interaction
 let photoWalls = [];
-
-
 
 function addMaze() {
   // Reset photoWalls for new maze
@@ -519,46 +507,19 @@ function updateCameraPosition() {
   camera.lookAt(model.position.x, model.position.y + 1, model.position.z);
 }
 
-
-// Classic orbit: mouse drag to rotate camera
-canvas.addEventListener('mousedown', (e) => {
-  if (!gameStarted) return;
-  isDragging = true;
-  lastMouseX = e.clientX;
-  lastMouseY = e.clientY;
-  canvas.style.cursor = 'grabbing';
-});
-window.addEventListener('mouseup', () => {
-  isDragging = false;
-  canvas.style.cursor = '';
-});
+// Camera always rotates with mouse movement (no click needed)
 window.addEventListener('mousemove', (e) => {
-  if (!isDragging) return;
-  const dx = e.clientX - lastMouseX;
-  const dy = e.clientY - lastMouseY;
-  lastMouseX = e.clientX;
-  lastMouseY = e.clientY;
+  if (!gameStarted) return;
+  const dx = e.movementX || e.mozMovementX || e.webkitMovementX || 0;
+  const dy = e.movementY || e.mozMovementY || e.webkitMovementY || 0;
   camOrbitAngle -= dx * 0.01;
   camOrbitVAngle -= dy * 0.01;
 });
-
-
-
-// Disable zooming with mouse wheel
-canvas.addEventListener('wheel', (e) => {
-  e.preventDefault();
-  // Optionally allow zooming:
-  // camOrbitRadius = Math.max(2, Math.min(12, camOrbitRadius + e.deltaY * 0.01));
-}, { passive: false });
-// Set camera to maximum close by default
-camOrbitRadius = 5;
 
 scene.add(new THREE.HemisphereLight(0xffffee, 0x444444, 1));
 const dirLight = new THREE.DirectionalLight(0xffffff, 1);
 dirLight.position.set(5, 10, 5);
 scene.add(dirLight);
-
-
 
 // Only start animation/game loop after menu
 function mainAnimate() {
@@ -635,17 +596,6 @@ function gameLoop() {
 
   // Minimap
   drawMinimap();
-
-
-  // Camera auto-follow: smoothly rotate camera to stay behind the character
-  if (model && pressed.size > 0) {
-    const lerpSpeed = 0.08;
-    let targetAngle = moveAngle;
-    let deltaAngle = targetAngle - camOrbitAngle;
-    while (deltaAngle > Math.PI) deltaAngle -= 2 * Math.PI;
-    while (deltaAngle < -Math.PI) deltaAngle += 2 * Math.PI;
-    camOrbitAngle += deltaAngle * lerpSpeed;
-  }
 }
 
 let model, mixer;
@@ -669,6 +619,8 @@ let moveSpeed = baseMoveSpeed;
 // Загрузка модели
 new GLTFLoader().load('/OlegRunning.glb', gltf => {
   model = gltf.scene;
+  // Increase model scale by 1.5x
+  model.scale.set(1.5, 1.5, 1.5);
   scene.add(model);
 
   const bbox = new THREE.Box3().setFromObject(model);
@@ -704,8 +656,6 @@ function switchToRun(play) {
 }
 
 // Обработка клавиш
-
-
 window.addEventListener('keydown', e => {
   // Sprint run
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
@@ -749,17 +699,34 @@ window.addEventListener('keydown', e => {
     velocityY = jumpPower;
   }
 
-
-
   // Photo wall reveal action
-  if (e.code === 'KeyF' && photoWallActionDiv.style.display === 'block' && nearestPhotoWall) {
-    if (!nearestPhotoWall.userData.revealed) {
-      nearestPhotoWall.material.map = nearestPhotoWall.userData.photoTexture;
-      nearestPhotoWall.material.needsUpdate = true;
-      nearestPhotoWall.userData.revealed = true;
-      photoWallActionDiv.style.display = 'none';
-      updatePhotoCounter();
+  if (e.code === 'KeyF') {
+    if (currentRevealedPhoto) {
+      // If a photo is currently shown in full size, hide it
+      hideFullSizePhoto();
+    } else if (photoWallActionDiv.style.display === 'block' && nearestPhotoWall) {
+      if (!nearestPhotoWall.userData.revealed) {
+        // First reveal: show on wall
+        const photoIndex = photoWalls.indexOf(nearestPhotoWall);
+        const photoPath = '/photos/' + photoFileNames[photoIndex];
+        nearestPhotoWall.material.map = new THREE.TextureLoader().load(photoPath);
+        nearestPhotoWall.material.needsUpdate = true;
+        nearestPhotoWall.userData.revealed = true;
+        nearestPhotoWall.userData.photoPath = photoPath;
+        photoWallActionDiv.style.display = 'none';
+        updatePhotoCounter();
+        // Show full size immediately after reveal
+        showFullSizePhoto(photoPath);
+      } else {
+        // Already revealed: show full size again
+        showFullSizePhoto(nearestPhotoWall.userData.photoPath);
+      }
     }
+  }
+
+  // Close full-size photo with Escape key
+  if (e.code === 'Escape' && currentRevealedPhoto) {
+    hideFullSizePhoto();
   }
 });
 
@@ -786,7 +753,6 @@ window.addEventListener('keyup', e => {
 });
 
 // Вычисление направления движения с учётом комбинации клавиш
-
 
 // Door logic (not used in maze mode)
 let nearestPhotoWall = null;
@@ -836,10 +802,7 @@ function checkCoinCollection() {
   }
 }
 
-
 //addCoins(15); // Отключаем монеты для коридора
-
-// (Removed duplicate animate loop)
 
 // Шахматный пол
 function addChessFloor(tileSize = 1, tilesX = 20, tilesZ = 20) {
@@ -865,15 +828,47 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// Camera auto-follow: smoothly rotate camera to stay behind the character
-  if (model && pressed.size > 0) {
-    // moveAngle is set to the direction of movement
-    // Smoothly interpolate camOrbitAngle towards moveAngle
-    const lerpSpeed = 0.08; // adjust for smoothness
-    let targetAngle = moveAngle;
-    // Normalize angles to avoid sudden jumps
-    let deltaAngle = targetAngle - camOrbitAngle;
-    while (deltaAngle > Math.PI) deltaAngle -= 2 * Math.PI;
-    while (deltaAngle < -Math.PI) deltaAngle += 2 * Math.PI;
-    camOrbitAngle += deltaAngle * lerpSpeed;
+// Add full-size photo view overlay
+const fullSizePhotoDiv = document.createElement('div');
+fullSizePhotoDiv.id = 'full-size-photo';
+fullSizePhotoDiv.style.position = 'fixed';
+fullSizePhotoDiv.style.top = '0';
+fullSizePhotoDiv.style.left = '0';
+fullSizePhotoDiv.style.width = '100vw';
+fullSizePhotoDiv.style.height = '100vh';
+fullSizePhotoDiv.style.background = 'rgba(0,0,0,0.7)';
+fullSizePhotoDiv.style.display = 'none';
+fullSizePhotoDiv.style.zIndex = '2000';
+fullSizePhotoDiv.style.justifyContent = 'center';
+fullSizePhotoDiv.style.alignItems = 'center';
+fullSizePhotoDiv.innerHTML = `
+  <div style="background:white;padding:20px;border-radius:10px;box-shadow:0 0 20px rgba(0,0,0,0.5);">
+    <img id="full-size-photo-img" style="max-width:70vw;max-height:70vh;object-fit:contain;display:block;">
+  </div>
+`;
+document.body.appendChild(fullSizePhotoDiv);
+
+// Store the currently revealed photo
+let currentRevealedPhoto = null;
+
+// Function to show full-size photo
+function showFullSizePhoto(photoPath) {
+  const img = document.getElementById('full-size-photo-img');
+  img.src = photoPath;
+  fullSizePhotoDiv.style.display = 'flex';
+  currentRevealedPhoto = photoPath;
+}
+
+// Function to hide full-size photo
+function hideFullSizePhoto() {
+  fullSizePhotoDiv.style.display = 'none';
+  currentRevealedPhoto = null;
+}
+
+// Add click handler to close full-size photo
+fullSizePhotoDiv.addEventListener('click', (e) => {
+  // Only close if clicking the background, not the image
+  if (e.target === fullSizePhotoDiv) {
+    hideFullSizePhoto();
   }
+});
