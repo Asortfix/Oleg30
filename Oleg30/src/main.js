@@ -78,6 +78,7 @@ function drawMinimap() {
       }
     }
   }
+  
   // Draw photo walls (unrevealed: yellow, revealed: green)
   for (const wall of photoWalls) {
     const gridX = Math.round((wall.position.x + (mazeCols * mazeTileSize) / 2 - mazeTileSize / 2) / mazeTileSize);
@@ -85,6 +86,25 @@ function drawMinimap() {
     minimapCtx.fillStyle = wall.userData.revealed ? '#0f0' : '#ff0';
     minimapCtx.fillRect(gridX * cellW, gridZ * cellH, cellW, cellH);
   }
+  
+  // Draw video walls (unrevealed: purple, revealed: light purple)
+  for (const wall of videoWalls) {
+    const gridX = Math.round((wall.position.x + (mazeCols * mazeTileSize) / 2 - mazeTileSize / 2) / mazeTileSize);
+    const gridZ = Math.round((wall.position.z + (mazeRows * mazeTileSize) / 2 - mazeTileSize / 2) / mazeTileSize);
+    minimapCtx.fillStyle = wall.userData.revealed ? '#a020f0' : '#800080';
+    minimapCtx.fillRect(gridX * cellW, gridZ * cellH, cellW, cellH);
+  }
+  
+  // Draw Yanuk figure (blue dot)
+  if (yanukFigure && !hasYanukDisk) {
+    const yanukX = (yanukFigure.position.x + (mazeCols * mazeTileSize) / 2 - mazeTileSize / 2) / mazeTileSize;
+    const yanukZ = (yanukFigure.position.z + (mazeRows * mazeTileSize) / 2 - mazeTileSize / 2) / mazeTileSize;
+    minimapCtx.fillStyle = '#00f';
+    minimapCtx.beginPath();
+    minimapCtx.arc(yanukX * cellW + cellW/2, yanukZ * cellH + cellH/2, Math.max(2, cellW/2), 0, 2 * Math.PI);
+    minimapCtx.fill();
+  }
+  
   // Draw player
   if (model) {
     const px = (model.position.x + (mazeCols * mazeTileSize) / 2 - mazeTileSize / 2) / mazeTileSize;
@@ -104,7 +124,10 @@ photoCounterDiv.style.fontSize = '24px';
 photoCounterDiv.style.color = '#fff';
 photoCounterDiv.style.textShadow = '1px 1px 2px #000';
 photoCounterDiv.style.zIndex = '10';
-photoCounterDiv.textContent = 'Photos: 0/0';
+photoCounterDiv.style.padding = '5px 10px';
+photoCounterDiv.style.background = 'rgba(0,0,0,0.5)';
+photoCounterDiv.style.borderRadius = '5px';
+photoCounterDiv.textContent = 'Фотки: 0/0 | Видео: 0/0';
 document.body.appendChild(photoCounterDiv);
 
 // Add step counter UI
@@ -117,8 +140,43 @@ stepCounterDiv.style.fontSize = '24px';
 stepCounterDiv.style.color = '#fff';
 stepCounterDiv.style.textShadow = '1px 1px 2px #000';
 stepCounterDiv.style.zIndex = '10';
-stepCounterDiv.textContent = 'Steps: 0';
+stepCounterDiv.style.padding = '5px 10px';
+stepCounterDiv.style.background = 'rgba(0,0,0,0.5)';
+stepCounterDiv.style.borderRadius = '5px';
+stepCounterDiv.textContent = 'Шаги: 0';
 document.body.appendChild(stepCounterDiv);
+
+// Add sunglasses collection UI
+// let sunglassesCounterDiv = document.createElement('div');
+// sunglassesCounterDiv.style.position = 'absolute';
+// sunglassesCounterDiv.style.top = '50px';
+// sunglassesCounterDiv.style.left = '10px';
+// sunglassesCounterDiv.style.fontFamily = 'sans-serif';
+// sunglassesCounterDiv.style.fontSize = '24px';
+// sunglassesCounterDiv.style.color = '#fff';
+// sunglassesCounterDiv.style.textShadow = '1px 1px 2px #000';
+// sunglassesCounterDiv.style.zIndex = '10';
+// sunglassesCounterDiv.textContent = 'Sunglasses: 0/3';
+// document.body.appendChild(sunglassesCounterDiv);
+
+// Add collection UI
+let collectionCounterDiv = document.createElement('div');
+collectionCounterDiv.style.position = 'absolute';
+collectionCounterDiv.style.top = '50px';
+collectionCounterDiv.style.left = '10px';
+collectionCounterDiv.style.fontFamily = 'sans-serif';
+collectionCounterDiv.style.fontSize = '24px';
+collectionCounterDiv.style.color = '#fff';
+collectionCounterDiv.style.textShadow = '1px 1px 2px #000';
+collectionCounterDiv.style.zIndex = '10';
+collectionCounterDiv.style.display = 'none'; // Hidden initially
+collectionCounterDiv.style.padding = '5px 10px';
+collectionCounterDiv.style.background = 'rgba(0,0,0,0.5)';
+collectionCounterDiv.style.borderRadius = '5px';
+collectionCounterDiv.innerHTML = `
+  <div>Диски: <span id="disk-count">0</span>/1</div>
+`;
+document.body.appendChild(collectionCounterDiv);
 
 // Hide game UI initially (before redefining setGameUIVisible)
 setGameUIVisible(false);
@@ -128,6 +186,7 @@ setGameUIVisible = function(visible) {
   if (typeof minimapCanvas !== 'undefined' && minimapCanvas) minimapCanvas.style.display = visible ? '' : 'none';
   if (typeof photoCounterDiv !== 'undefined' && photoCounterDiv) photoCounterDiv.style.display = visible ? '' : 'none';
   if (typeof stepCounterDiv !== 'undefined' && stepCounterDiv) stepCounterDiv.style.display = visible ? '' : 'none';
+  if (typeof collectionCounterDiv !== 'undefined' && collectionCounterDiv) collectionCounterDiv.style.display = hasCollectedAnyItem ? '' : 'none';
   if (typeof speechBubbleDiv !== 'undefined' && speechBubbleDiv) speechBubbleDiv.style.display = visible ? '' : 'none';
   if (typeof photoWallActionDiv !== 'undefined' && photoWallActionDiv) photoWallActionDiv.style.display = 'none';
   const scoreDiv = document.getElementById('score');
@@ -223,16 +282,20 @@ function startGame() {
 }
 
 function updatePhotoCounter() {
-  const total = photoWalls.length;
-  const revealed = photoWalls.filter(w => w.userData.revealed).length;
-  photoCounterDiv.textContent = `Photos: ${revealed}/${total}`;
+  const totalPhotos = photoWalls.length;
+  const revealedPhotos = photoWalls.filter(w => w.userData.revealed).length;
+  const totalVideos = videoWalls.length;
+  const revealedVideos = videoWalls.filter(w => w.userData.revealed).length;
+  photoCounterDiv.textContent = `Фотки: ${revealedPhotos}/${totalPhotos} | Видео: ${revealedVideos}/${totalVideos}`;
 }
-// Helper: find nearest photo wall within distance
-function getNearestPhotoWall(maxDist = 2.5) {
+// Helper: find nearest media wall within distance
+function getNearestMediaWall(maxDist = 2.5) {
   if (!model) return null;
   let nearest = null;
   let minDist = maxDist;
-  for (const wall of photoWalls) {
+  
+  // Check both photo and video walls
+  for (const wall of [...photoWalls, ...videoWalls]) {
     if (wall.userData.revealed) continue;
     const dist = model.position.distanceTo(wall.position);
     if (dist < minDist) {
@@ -259,8 +322,11 @@ let camOrbitY = 2.5; // height above character
 let camOrbitAngle = 0; // horizontal angle (radians)
 let camOrbitVAngle = 0.2; // vertical angle (radians)
 
-// Static maze, expanded 3x in both dimensions
-// Hardcoded photo file names from /public/photos (auto-generated)
+// Separate arrays for photos and videos
+const videoFileNames = [
+  "video_2025-05-23_22-28-15.mp4"
+];
+
 const photoFileNames = [
   "photo_2025-04-27_22-34-08.jpg",
   "photo_2025-04-27_22-35-22.jpg",
@@ -366,15 +432,25 @@ photoWallActionDiv.style.color = '#fff';
 photoWallActionDiv.style.fontSize = '2em';
 photoWallActionDiv.style.display = 'none';
 photoWallActionDiv.style.zIndex = '10';
-photoWallActionDiv.innerText = 'Press F to reveal photo';
+photoWallActionDiv.innerText = 'Нажми F чтобы увидеть фотку';
 document.body.appendChild(photoWallActionDiv);
 
 // Store special photo walls for interaction
 let photoWalls = [];
 
+// Store video walls separately
+let videoWalls = [];
+
+let hasCollectedAnyItem = false;
+
+// Store collectible items
+let diskItems = [];
+let collectedDisks = 0;
+
 function addMaze() {
-  // Reset photoWalls for new maze
+  // Reset photoWalls and videoWalls for new maze
   photoWalls.length = 0;
+  videoWalls.length = 0;
   // Floor
   const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
   const blackMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
@@ -413,6 +489,7 @@ function addMaze() {
 
   // Find all eligible wall positions (including outer walls)
   let eligiblePhotoWalls = [];
+  let eligibleVideoWalls = [];
   for (let row = 0; row < mazeRows; row++) {
     for (let col = 0; col < mazeCols; col++) {
       // Check if this is a wall block
@@ -443,12 +520,13 @@ function addMaze() {
         
         if (isAccessible) {
           eligiblePhotoWalls.push({ row, col });
+          eligibleVideoWalls.push({ row, col });
         }
       }
     }
   }
 
-  // Shuffle and pick as many as there are photos
+  // Shuffle and pick positions for photos and videos
   function shuffle(arr) {
     for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -456,13 +534,23 @@ function addMaze() {
     }
     return arr;
   }
+  
   eligiblePhotoWalls = shuffle(eligiblePhotoWalls);
-  const selectedPhotoWalls = eligiblePhotoWalls.slice(0, photoTextures.length);
+  eligibleVideoWalls = shuffle(eligibleVideoWalls);
+  
+  const selectedPhotoWalls = eligiblePhotoWalls.slice(0, photoFileNames.length);
+  const selectedVideoWalls = eligibleVideoWalls.slice(0, videoFileNames.length);
 
   // Map for quick lookup
   const photoWallMap = new Map();
+  const videoWallMap = new Map();
+  
   selectedPhotoWalls.forEach((pos, i) => {
     photoWallMap.set(`${pos.row},${pos.col}`, i);
+  });
+  
+  selectedVideoWalls.forEach((pos, i) => {
+    videoWallMap.set(`${pos.row},${pos.col}`, i);
   });
 
   // Build walls
@@ -470,18 +558,28 @@ function addMaze() {
     for (let col = 0; col < mazeCols; col++) {
       if (mazeMap[row][col] === 1) {
         let isPhotoWall = false;
+        let isVideoWall = false;
         let photoTex = null;
+        let videoPath = null;
+        
         let photoIdx = photoWallMap.get(`${row},${col}`);
+        let videoIdx = videoWallMap.get(`${row},${col}`);
+        
         if (photoIdx !== undefined) {
           isPhotoWall = true;
-          photoTex = photoTextures[photoIdx];
+          photoTex = new THREE.TextureLoader().load('/photos/' + photoFileNames[photoIdx]);
+        } else if (videoIdx !== undefined) {
+          isVideoWall = true;
+          videoPath = '/videos/' + videoFileNames[videoIdx];
         }
+        
         let mat;
-        if (isPhotoWall) {
+        if (isPhotoWall || isVideoWall) {
           mat = new THREE.MeshStandardMaterial({ map: questionTexture });
         } else {
           mat = wallMat;
         }
+        
         const wall = new THREE.Mesh(
           new THREE.BoxGeometry(mazeTileSize, 2.5, mazeTileSize),
           mat
@@ -492,16 +590,30 @@ function addMaze() {
           (row - mazeRows / 2) * mazeTileSize + mazeTileSize / 2
         );
         scene.add(wall);
+        
         if (isPhotoWall) {
           wall.userData.isPhotoWall = true;
+          wall.userData.isVideoWall = false;
           wall.userData.revealed = false;
-          wall.userData.photoTexture = photoTex;
+          wall.userData.mediaPath = '/photos/' + photoFileNames[photoIdx];
           photoWalls.push(wall);
+        } else if (isVideoWall) {
+          wall.userData.isPhotoWall = false;
+          wall.userData.isVideoWall = true;
+          wall.userData.revealed = false;
+          wall.userData.mediaPath = videoPath;
+          videoWalls.push(wall);
         }
       }
     }
   }
   updatePhotoCounter();
+
+  // Place collectibles after maze is created
+  placeCollectibles();
+
+  // Place Yanuk after maze is created
+  placeYanuk();
 }
 
 function addDoors() {
@@ -639,6 +751,20 @@ function gameLoop() {
 
   // Update speech bubble position
   updateSpeechBubble();
+
+  // Check for item collection
+  checkItemCollection();
+
+  // Check Yanuk proximity
+  if (yanukFigure && !hasYanukDisk) {
+    const distance = model.position.distanceTo(yanukFigure.position);
+    isNearYanuk = distance < 2.5;
+    yanukProximityDiv.style.display = isNearYanuk ? 'block' : 'none';
+    // Hide action dialog when not near
+    if (!isNearYanuk) {
+      yanukActionDiv.style.display = 'none';
+    }
+  }
 }
 
 let model, mixer;
@@ -747,34 +873,50 @@ window.addEventListener('keydown', e => {
     velocityY = jumpPower;
   }
 
-  // Photo wall reveal action
+  // Photo/video wall reveal action
   if (e.code === 'KeyF') {
     if (currentRevealedPhoto) {
-      // If a photo is currently shown in full size, hide it
       hideFullSizePhoto();
+    } else if (currentPlayingVideo) {
+      hideFullSizeVideo();
     } else if (photoWallActionDiv.style.display === 'block' && nearestPhotoWall) {
       if (!nearestPhotoWall.userData.revealed) {
         // First reveal: show on wall
-        const photoIndex = photoWalls.indexOf(nearestPhotoWall);
-        const photoPath = '/photos/' + photoFileNames[photoIndex];
-        nearestPhotoWall.material.map = new THREE.TextureLoader().load(photoPath);
+        nearestPhotoWall.material.map = new THREE.TextureLoader().load(nearestPhotoWall.userData.mediaPath);
         nearestPhotoWall.material.needsUpdate = true;
         nearestPhotoWall.userData.revealed = true;
-        nearestPhotoWall.userData.photoPath = photoPath;
         photoWallActionDiv.style.display = 'none';
         updatePhotoCounter();
-        // Show full size immediately after reveal
-        showFullSizePhoto(photoPath);
+        
+        // Show full size based on media type
+        if (nearestPhotoWall.userData.isVideoWall) {
+          showFullSizeVideo(nearestPhotoWall.userData.mediaPath);
+        } else {
+          showFullSizePhoto(nearestPhotoWall.userData.mediaPath);
+        }
       } else {
         // Already revealed: show full size again
-        showFullSizePhoto(nearestPhotoWall.userData.photoPath);
+        if (nearestPhotoWall.userData.isVideoWall) {
+          showFullSizeVideo(nearestPhotoWall.userData.mediaPath);
+        } else {
+          showFullSizePhoto(nearestPhotoWall.userData.mediaPath);
+        }
       }
+    } else if (isNearYanuk && !hasYanukDisk) {
+      yanukProximityDiv.style.display = 'none';
+      setTimeout(() => {
+        yanukActionDiv.style.display = 'block';
+      }, 100);
     }
   }
 
-  // Close full-size photo with Escape key
-  if (e.code === 'Escape' && currentRevealedPhoto) {
-    hideFullSizePhoto();
+  // Close full-size media with Escape key
+  if (e.code === 'Escape') {
+    if (currentRevealedPhoto) {
+      hideFullSizePhoto();
+    } else if (currentPlayingVideo) {
+      hideFullSizeVideo();
+    }
   }
 });
 
@@ -805,76 +947,19 @@ window.addEventListener('keyup', e => {
 // Door logic (not used in maze mode)
 let nearestPhotoWall = null;
 function checkDoorProximity() {
-  // Only handle photo wall proximity (no doorActionDiv)
-  nearestPhotoWall = getNearestPhotoWall();
+  nearestPhotoWall = getNearestMediaWall();
   if (nearestPhotoWall) {
     photoWallActionDiv.style.display = 'block';
+    // Update action text based on media type
+    if (nearestPhotoWall.userData.isVideoWall) {
+      photoWallActionDiv.innerText = 'Нажми F чтобы посмотреть видео';
+    } else {
+      photoWallActionDiv.innerText = 'Нажми F чтобы увидеть фотку';
+    }
   } else {
     photoWallActionDiv.style.display = 'none';
   }
 }
-
-let coins = [];
-let score = 0;
-
-// Создание монет
-function addCoins(count = 10) {
-  const coinGeometry = new THREE.CylinderGeometry(0.2, 0.2, 0.05, 32);
-  const coinMaterial = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.8, roughness: 0.3 });
-
-  for (let i = 0; i < count; i++) {
-    const coin = new THREE.Mesh(coinGeometry, coinMaterial);
-    coin.rotation.x = Math.PI / 2;
-    // Случайная позиция на полу
-    coin.position.x = (Math.floor(Math.random() * 18) - 9) + 0.5;
-    coin.position.z = (Math.floor(Math.random() * 18) - 9) + 0.5;
-    coin.position.y = 0.15;
-    scene.add(coin);
-    coins.push(coin);
-  }
-}
-
-// Проверка сбора монет
-function checkCoinCollection() {
-  if (!model) return;
-  const playerPos = model.position;
-  for (let i = coins.length - 1; i >= 0; i--) {
-    const coin = coins[i];
-    const dist = playerPos.distanceTo(coin.position);
-    if (dist < 0.5) {
-      scene.remove(coin);
-      coins.splice(i, 1);
-      score++;
-      document.getElementById('score').textContent = `Coins: ${score}`;
-    }
-  }
-}
-
-//addCoins(15); // Отключаем монеты для коридора
-
-// Шахматный пол
-function addChessFloor(tileSize = 1, tilesX = 20, tilesZ = 20) {
-  const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
-  const blackMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
-
-  for (let x = -tilesX / 2; x < tilesX / 2; x++) {
-    for (let z = -tilesZ / 2; z < tilesZ / 2; z++) {
-      const isWhite = (x + z) % 2 === 0;
-      const tile = new THREE.Mesh(
-        new THREE.BoxGeometry(tileSize, 0.05, tileSize),
-        isWhite ? whiteMat : blackMat
-      );
-      tile.position.set(x * tileSize, 0, z * tileSize);
-      scene.add(tile);
-    }
-  }
-}
-
-window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
 
 // Add full-size photo view overlay
 const fullSizePhotoDiv = document.createElement('div');
@@ -980,7 +1065,7 @@ function showMessage(message) {
 
 function updateSpeechBubble() {
   if (!model) return;
-  
+
   // Convert 3D position to screen coordinates
   const vector = model.position.clone();
   vector.y += 3; // Position above character's head
@@ -992,3 +1077,236 @@ function updateSpeechBubble() {
   speechBubbleDiv.style.left = `${x - speechBubbleDiv.offsetWidth / 2}px`;
   speechBubbleDiv.style.top = `${y - 50}px`;
 }
+
+// Function to place collectibles in the maze
+function placeCollectibles() {
+  // Find all accessible positions
+  let accessiblePositions = [];
+  for (let row = 0; row < mazeRows; row++) {
+    for (let col = 0; col < mazeCols; col++) {
+      if (mazeMap[row][col] === 0) { // Only place on paths
+        accessiblePositions.push({ row, col });
+      }
+    }
+  }
+
+  // Shuffle positions
+  for (let i = accessiblePositions.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [accessiblePositions[i], accessiblePositions[j]] = [accessiblePositions[j], accessiblePositions[i]];
+  }
+}
+
+// Function to check for item collection
+function checkItemCollection() {
+  if (!model) return;
+  
+  // Check disk
+  for (let i = diskItems.length - 1; i >= 0; i--) {
+    const disk = diskItems[i];
+    const distance = model.position.distanceTo(disk.position);
+    
+    if (distance < 1.5) {
+      scene.remove(disk);
+      diskItems.splice(i, 1);
+      collectedDisks++;
+      hasCollectedAnyItem = true;
+      document.getElementById('disk-count').textContent = collectedDisks;
+      collectionCounterDiv.style.display = '';
+      showMessage("Нашел диск! Интересно, что на нем?");
+    }
+  }
+}
+
+// Add Yanuk interaction UI
+let yanukActionDiv = document.createElement('div');
+yanukActionDiv.style.position = 'absolute';
+yanukActionDiv.style.top = '55%';
+yanukActionDiv.style.left = '50%';
+yanukActionDiv.style.transform = 'translate(-50%, -50%)';
+yanukActionDiv.style.padding = '16px 32px';
+yanukActionDiv.style.background = 'rgba(0,0,0,0.7)';
+yanukActionDiv.style.color = '#fff';
+yanukActionDiv.style.fontSize = '2em';
+yanukActionDiv.style.display = 'none';
+yanukActionDiv.style.zIndex = '10';
+yanukActionDiv.innerHTML = `
+  <div>Взять диск?</div>
+  <div style="margin-top: 16px;">
+    <button id="yanuk-yes" style="margin-right: 16px; padding: 8px 16px;">Да</button>
+    <button id="yanuk-no" style="padding: 8px 16px;">Нет</button>
+  </div>
+`;
+document.body.appendChild(yanukActionDiv);
+
+// Add Yanuk proximity prompt
+let yanukProximityDiv = document.createElement('div');
+yanukProximityDiv.style.position = 'absolute';
+yanukProximityDiv.style.top = '55%';
+yanukProximityDiv.style.left = '50%';
+yanukProximityDiv.style.transform = 'translate(-50%, -50%)';
+yanukProximityDiv.style.padding = '16px 32px';
+yanukProximityDiv.style.background = 'rgba(0,0,0,0.7)';
+yanukProximityDiv.style.color = '#fff';
+yanukProximityDiv.style.fontSize = '2em';
+yanukProximityDiv.style.display = 'none';
+yanukProximityDiv.style.zIndex = '10';
+yanukProximityDiv.textContent = 'Нажмите F';
+document.body.appendChild(yanukProximityDiv);
+
+let yanukFigure = null;
+let isNearYanuk = false;
+let hasYanukDisk = false;
+
+// Function to place Yanuk in a corridor
+function placeYanuk() {
+  // Find a corridor position in the bottom right area
+  let found = false;
+  let col = mazeCols - 2;
+  let row = mazeRows - 2;
+  
+  // Search for a corridor position in the bottom right area
+  while (!found && row > mazeRows / 2 && col > mazeCols / 2) {
+    if (mazeMap[row][col] === 0) { // Check if it's a corridor
+      found = true;
+    } else {
+      // Try moving left first
+      col--;
+      if (col <= mazeCols / 2) {
+        // If we've gone too far left, move up and reset column
+        col = mazeCols - 2;
+        row--;
+      }
+    }
+  }
+  
+  // If no corridor found in bottom right, search the entire bottom area
+  if (!found) {
+    row = mazeRows - 2;
+    col = mazeCols - 2;
+    while (!found && row > mazeRows / 2) {
+      while (!found && col > 0) {
+        if (mazeMap[row][col] === 0) {
+          found = true;
+        } else {
+          col--;
+        }
+      }
+      if (!found) {
+        row--;
+        col = mazeCols - 2;
+      }
+    }
+  }
+  
+  // Convert grid position to world coordinates
+  const x = (col - mazeCols / 2) * mazeTileSize + mazeTileSize / 2;
+  const z = (row - mazeRows / 2) * mazeTileSize + mazeTileSize / 2;
+
+  // Load Yanuk model
+  new GLTFLoader().load('/yanuk.glb', gltf => {
+    yanukFigure = gltf.scene;
+    yanukFigure.position.set(x, 1, z); // Keep the height at 2.5
+    yanukFigure.scale.set(1.5, 1.5, 1.5);
+    yanukFigure.rotation.y = Math.PI; // Face towards the center of the maze
+    
+    // Add a point light to make it more visible
+    const light = new THREE.PointLight(0x4444ff, 1, 5);
+    light.position.set(0, 2, 0);
+    yanukFigure.add(light);
+    
+    scene.add(yanukFigure);
+  });
+}
+
+// Add Yanuk interaction handlers
+document.getElementById('yanuk-yes').addEventListener('click', () => {
+  yanukActionDiv.style.display = 'none';
+  hasYanukDisk = true;
+  
+  // Animate Yanuk rising up before disappearing
+  if (yanukFigure) {
+    const startY = yanukFigure.position.y;
+    const endY = startY + 5;
+    const duration = 1000;
+    const startTime = Date.now();
+    
+    function animateRise() {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      yanukFigure.position.y = startY + (endY * progress);
+      
+      if (progress < 1) {
+        requestAnimationFrame(animateRise);
+      } else {
+        scene.remove(yanukFigure);
+        yanukFigure = null;
+      }
+    }
+    
+    animateRise();
+  }
+  
+  // Update counter
+  document.getElementById('disk-count').textContent = '1';
+  collectionCounterDiv.style.display = '';
+});
+
+document.getElementById('yanuk-no').addEventListener('click', () => {
+  yanukActionDiv.style.display = 'none';
+  if (isNearYanuk) {
+    yanukProximityDiv.style.display = 'block';
+  }
+});
+
+// Add video player overlay
+const videoPlayerDiv = document.createElement('div');
+videoPlayerDiv.id = 'video-player';
+videoPlayerDiv.style.position = 'fixed';
+videoPlayerDiv.style.top = '0';
+videoPlayerDiv.style.left = '0';
+videoPlayerDiv.style.width = '100vw';
+videoPlayerDiv.style.height = '100vh';
+videoPlayerDiv.style.background = 'rgba(0,0,0,0.7)';
+videoPlayerDiv.style.display = 'none';
+videoPlayerDiv.style.zIndex = '2000';
+videoPlayerDiv.style.justifyContent = 'center';
+videoPlayerDiv.style.alignItems = 'center';
+videoPlayerDiv.innerHTML = `
+  <div style="background:black;padding:20px;border-radius:10px;box-shadow:0 0 20px rgba(0,0,0,0.5);">
+    <video id="full-size-video" style="max-width:70vw;max-height:70vh;object-fit:contain;display:block;" controls>
+      Your browser does not support the video tag.
+    </video>
+  </div>
+`;
+document.body.appendChild(videoPlayerDiv);
+
+// Store the currently playing video
+let currentPlayingVideo = null;
+
+// Function to show full-size video
+function showFullSizeVideo(videoPath) {
+  const video = document.getElementById('full-size-video');
+  video.src = videoPath;
+  videoPlayerDiv.style.display = 'flex';
+  currentPlayingVideo = videoPath;
+  video.play();
+}
+
+// Function to hide full-size video
+function hideFullSizeVideo() {
+  const video = document.getElementById('full-size-video');
+  video.pause();
+  video.src = '';
+  videoPlayerDiv.style.display = 'none';
+  currentPlayingVideo = null;
+}
+
+// Add click handler to close video
+videoPlayerDiv.addEventListener('click', (e) => {
+  // Only close if clicking the background, not the video
+  if (e.target === videoPlayerDiv) {
+    hideFullSizeVideo();
+  }
+});
