@@ -1,4 +1,100 @@
-// Photo reveal counter UI
+// --- START MENU UI ---
+let gameStarted = false;
+let menuStage = 0; // 0: greeting, 1: character, 2: game
+
+// Hide all game UI until game starts
+// Temporary stub, will be redefined after all UI elements are created
+let setGameUIVisible = function(){};
+
+// Create start menu overlay
+const startMenuDiv = document.createElement('div');
+startMenuDiv.id = 'start-menu';
+startMenuDiv.style.position = 'fixed';
+startMenuDiv.style.top = '0';
+startMenuDiv.style.left = '0';
+startMenuDiv.style.width = '100vw';
+startMenuDiv.style.height = '100vh';
+startMenuDiv.style.background = 'linear-gradient(rgba(0,0,0,0.85),rgba(0,0,0,0.85))';
+startMenuDiv.style.display = 'flex';
+startMenuDiv.style.flexDirection = 'column';
+startMenuDiv.style.justifyContent = 'center';
+startMenuDiv.style.alignItems = 'center';
+startMenuDiv.style.zIndex = '1000';
+startMenuDiv.innerHTML = `
+  <img src="/photos/OlegOriginal.jpg" alt="OlegOriginal" style="max-width:40vw;max-height:40vh;border-radius:16px;box-shadow:0 0 32px #000;margin-bottom:32px;">
+  <div style="color:#fff;font-size:2.5em;text-shadow:2px 2px 8px #000;margin-bottom:32px;">Хочешь попасть в игру?</div>
+  <button id="menu-yes-btn" style="font-size:2em;padding:0.5em 2em;margin-bottom:16px;">ДА</button>
+`;
+document.body.appendChild(startMenuDiv);
+
+// Second menu stage (character preview)
+const charMenuDiv = document.createElement('div');
+charMenuDiv.id = 'char-menu';
+charMenuDiv.style.position = 'fixed';
+charMenuDiv.style.top = '0';
+charMenuDiv.style.left = '0';
+charMenuDiv.style.width = '100vw';
+charMenuDiv.style.height = '100vh';
+charMenuDiv.style.background = 'linear-gradient(rgba(0,0,0,0.92),rgba(0,0,0,0.92))';
+charMenuDiv.style.display = 'none';
+charMenuDiv.style.flexDirection = 'column';
+charMenuDiv.style.justifyContent = 'center';
+charMenuDiv.style.alignItems = 'center';
+charMenuDiv.style.zIndex = '1001';
+charMenuDiv.innerHTML = `
+  <div id="char-3d-container" style="width:340px;height:480px;background:rgba(0,0,0,0.2);border-radius:24px;margin-bottom:32px;box-shadow:0 0 32px #000;display:flex;align-items:center;justify-content:center;"></div>
+  <button id="menu-start-btn" style="font-size:2em;padding:0.5em 2em;">Начать игру</button>
+`;
+document.body.appendChild(charMenuDiv);
+
+// Minimap UI (created here for visibility control)
+let minimapCanvas = document.createElement('canvas');
+minimapCanvas.id = 'minimap';
+minimapCanvas.width = 220;
+minimapCanvas.height = 220;
+minimapCanvas.style.position = 'absolute';
+minimapCanvas.style.bottom = '10px';
+minimapCanvas.style.left = '10px';
+minimapCanvas.style.background = 'rgba(0,0,0,0.7)';
+minimapCanvas.style.border = '2px solid #fff';
+minimapCanvas.style.zIndex = '20';
+document.body.appendChild(minimapCanvas);
+const minimapCtx = minimapCanvas.getContext('2d');
+// Minimap draw function
+function drawMinimap() {
+  const w = minimapCanvas.width, h = minimapCanvas.height;
+  minimapCtx.clearRect(0, 0, w, h);
+  // Draw maze
+  const cellW = w / mazeCols;
+  const cellH = h / mazeRows;
+  for (let row = 0; row < mazeRows; row++) {
+    for (let col = 0; col < mazeCols; col++) {
+      if (mazeMap[row][col] === 1) {
+        minimapCtx.fillStyle = '#222';
+        minimapCtx.fillRect(col * cellW, row * cellH, cellW, cellH);
+      } else {
+        minimapCtx.fillStyle = '#eee';
+        minimapCtx.fillRect(col * cellW, row * cellH, cellW, cellH);
+      }
+    }
+  }
+  // Draw photo walls (unrevealed: yellow, revealed: green)
+  for (const wall of photoWalls) {
+    const gridX = Math.round((wall.position.x + (mazeCols * mazeTileSize) / 2 - mazeTileSize / 2) / mazeTileSize);
+    const gridZ = Math.round((wall.position.z + (mazeRows * mazeTileSize) / 2 - mazeTileSize / 2) / mazeTileSize);
+    minimapCtx.fillStyle = wall.userData.revealed ? '#0f0' : '#ff0';
+    minimapCtx.fillRect(gridX * cellW, gridZ * cellH, cellW, cellH);
+  }
+  // Draw player
+  if (model) {
+    const px = (model.position.x + (mazeCols * mazeTileSize) / 2 - mazeTileSize / 2) / mazeTileSize;
+    const pz = (model.position.z + (mazeRows * mazeTileSize) / 2 - mazeTileSize / 2) / mazeTileSize;
+    minimapCtx.fillStyle = '#f00';
+    minimapCtx.beginPath();
+    minimapCtx.arc(px * cellW + cellW/2, pz * cellH + cellH/2, Math.max(2, cellW/2), 0, 2 * Math.PI);
+    minimapCtx.fill();
+  }
+}
 let photoCounterDiv = document.createElement('div');
 photoCounterDiv.style.position = 'absolute';
 photoCounterDiv.style.top = '10px';
@@ -10,6 +106,107 @@ photoCounterDiv.style.textShadow = '1px 1px 2px #000';
 photoCounterDiv.style.zIndex = '10';
 photoCounterDiv.textContent = 'Photos: 0/0';
 document.body.appendChild(photoCounterDiv);
+
+// Hide game UI initially (before redefining setGameUIVisible)
+setGameUIVisible(false);
+
+// Now that all UI elements are defined, redefine setGameUIVisible
+setGameUIVisible = function(visible) {
+  if (typeof minimapCanvas !== 'undefined' && minimapCanvas) minimapCanvas.style.display = visible ? '' : 'none';
+  if (typeof photoCounterDiv !== 'undefined' && photoCounterDiv) photoCounterDiv.style.display = visible ? '' : 'none';
+  // Only hide photoWallActionDiv if it is already defined
+  if (typeof photoWallActionDiv !== 'undefined' && photoWallActionDiv) photoWallActionDiv.style.display = 'none';
+  const scoreDiv = document.getElementById('score');
+  if (scoreDiv) scoreDiv.style.display = visible ? '' : 'none';
+};
+
+// --- MENU LOGIC ---
+// Stage 1: Greeting -> Stage 2: Character -> Stage 3: Game
+const yesBtn = document.getElementById('menu-yes-btn');
+const startBtn = document.getElementById('menu-start-btn');
+if (yesBtn) {
+  yesBtn.onclick = () => {
+    // Animate out greeting, show char preview
+    startMenuDiv.style.transition = 'opacity 1.2s cubic-bezier(0.4,0,0.2,1)';
+    startMenuDiv.style.opacity = '0';
+    setTimeout(() => {
+      startMenuDiv.style.display = 'none';
+      charMenuDiv.style.display = 'flex';
+      charMenuDiv.style.opacity = '0';
+      setTimeout(() => {
+        charMenuDiv.style.transition = 'opacity 1.2s cubic-bezier(0.4,0,0.2,1)';
+        charMenuDiv.style.opacity = '1';
+      }, 10);
+      // Show 3D character in char-3d-container
+      showCharPreview();
+    }, 1200);
+  };
+}
+if (startBtn) {
+  startBtn.onclick = () => {
+    // Animate out char preview, start game
+    charMenuDiv.style.transition = 'opacity 1.2s cubic-bezier(0.4,0,0.2,1)';
+    charMenuDiv.style.opacity = '0';
+    setTimeout(() => {
+      charMenuDiv.style.display = 'none';
+      setGameUIVisible(true);
+      gameStarted = true;
+      // Start main game logic
+      startGame();
+    }, 1200);
+  };
+}
+
+// Show 3D character preview in menu
+function showCharPreview() {
+  // Use Three.js to render OlegRunning.glb in the char-3d-container
+  if (window.charPreviewRenderer) return; // Only once
+  const container = document.getElementById('char-3d-container');
+  // Make container 2x bigger
+  container.style.width = '680px';
+  container.style.height = '960px';
+  const previewRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+  previewRenderer.setClearColor(0x000000, 0);
+  previewRenderer.setSize(container.clientWidth, container.clientHeight);
+  container.appendChild(previewRenderer.domElement);
+  window.charPreviewRenderer = previewRenderer;
+  const previewScene = new THREE.Scene();
+  const previewCamera = new THREE.PerspectiveCamera(50, container.clientWidth/container.clientHeight, 0.1, 100);
+  previewCamera.position.set(0, 3, 8); // Move camera back for bigger model
+  previewCamera.lookAt(0, 2, 0);
+  previewScene.add(new THREE.HemisphereLight(0xffffee, 0x444444, 1));
+  const loader = new GLTFLoader();
+  loader.load('/Oleg2.glb', gltf => {
+    const charModel = gltf.scene;
+    charModel.position.set(0, 0, 0);
+    charModel.scale.set(4, 4, 4); // 2x bigger than before
+    previewScene.add(charModel);
+    // Face the screen
+    charModel.rotation.y = -Math.PI / 2;
+    // Animate idle if available
+    if (gltf.animations && gltf.animations.length > 0) {
+      const mixer = new THREE.AnimationMixer(charModel);
+      const action = mixer.clipAction(gltf.animations[0]);
+      action.play();
+      function animatePreview() {
+        if (!window.charPreviewRenderer) return;
+        mixer.update(0.016);
+        previewRenderer.render(previewScene, previewCamera);
+        requestAnimationFrame(animatePreview);
+      }
+      animatePreview();
+    } else {
+      previewRenderer.render(previewScene, previewCamera);
+    }
+  });
+}
+
+// Main game logic entry point
+function startGame() {
+  // All game logic that should only run after menu
+  addMaze();
+  // Model loading and animation already handled below, so just continue
+}
 
 function updatePhotoCounter() {
   const total = photoWalls.length;
@@ -43,7 +240,8 @@ scene.background = new THREE.Color(0x87ceeb);
 
 
 
-// Camera orbit control variables
+
+// Camera orbit control variables (classic smooth system)
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
 let camOrbitRadius = 5;
 let camOrbitY = 2.5; // height above character
@@ -124,11 +322,11 @@ const baseMaze = [
   [1,0,0,1,0,1,0,0,0,1,0,0,0,1,0,1,0,0,0,0,0,1,0,1,0,0,0,1,0,0,0,1,0,1,0,0,0,1],
   [1,1,0,1,0,1,0,1,0,1,1,1,0,1,0,1,1,1,0,1,0,1,0,1,0,1,0,1,1,1,0,1,0,1,1,1,0,1],
   [1,0,0,0,0,1,0,1,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,1,0,0,0,1,0,0,0,0,0,1,0,1],
-  [1,0,1,1,0,1,1,1,1,1,0,1,1,1,1,1,0,1,1,0,1,1,0,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1],
-  [1,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,1],
+  [1,0,1,1,0,1,1,1,1,1,0,1,1,1,1,1,0,1,1,0,1,1,0,1,1,1,1,1,0,1,1,1,1,1,0,1,0,1],
+  [1,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,1],
   [1,1,0,1,1,1,0,1,0,1,1,1,1,1,0,1,1,1,0,1,0,1,1,1,0,1,0,1,1,1,1,1,0,1,1,1,0,1],
   [1,0,0,0,0,1,0,1,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,1,0,1,0,0,0,0,0,1,0,0,0,1,0,1],
-  [1,0,1,1,0,1,0,1,1,1,1,1,0,1,1,1,0,1,1,0,1,1,0,1,0,1,1,1,1,1,0,1,1,1,0,1,1,1],
+  [1,0,1,1,0,1,0,1,1,1,1,1,0,1,1,1,0,1,1,0,1,1,0,1,0,1,1,1,1,1,0,1,1,1,0,1,0,1],
   [1,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1],
   [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
 ];
@@ -149,26 +347,8 @@ for (let r = 0; r < baseRows; r++) {
   }
 }
 
-let doors = [];
-const doorWidth = 1.5;
-const doorHeight = 2.5;
-const doorDepth = 0.2;
 
-// UI for door action
 
-let doorActionDiv = document.createElement('div');
-doorActionDiv.style.position = 'absolute';
-doorActionDiv.style.top = '50%';
-doorActionDiv.style.left = '50%';
-doorActionDiv.style.transform = 'translate(-50%, -50%)';
-doorActionDiv.style.padding = '16px 32px';
-doorActionDiv.style.background = 'rgba(0,0,0,0.7)';
-doorActionDiv.style.color = '#fff';
-doorActionDiv.style.fontSize = '2em';
-doorActionDiv.style.display = 'none';
-doorActionDiv.style.zIndex = '10';
-doorActionDiv.innerText = 'Press F to open the door';
-document.body.appendChild(doorActionDiv);
 
 // UI for photo wall action
 let photoWallActionDiv = document.createElement('div');
@@ -222,45 +402,39 @@ function addMaze() {
     return tex;
   });
 
-  // Find all eligible horizontal wall positions (between two open 2x2 corridor blocks)
+  // Find all eligible wall positions (including outer walls)
   let eligiblePhotoWalls = [];
-  // Only check horizontal walls between two open corridors
-  for (let row = 0; row < mazeRows - scale; row++) {
+  for (let row = 0; row < mazeRows; row++) {
     for (let col = 0; col < mazeCols; col++) {
-      // Check if this 2x2 block is a wall
-      let isWallBlock = true;
-      for (let dr = 0; dr < scale; dr++) {
-        for (let dc = 0; dc < scale; dc++) {
-          if (mazeMap[row + dr][col + dc] !== 1) isWallBlock = false;
-        }
-      }
-      if (!isWallBlock) continue;
-      // Check above and below for open 2x2 corridor blocks
-      let aboveOpen = true, belowOpen = true;
-      if (row - scale >= 0) {
-        for (let dr = 0; dr < scale; dr++) {
-          for (let dc = 0; dc < scale; dc++) {
-            if (mazeMap[row - scale + dr][col + dc] !== 0) aboveOpen = false;
+      // Check if this is a wall block
+      if (mazeMap[row][col] === 1) {
+        // Check if it's accessible from at least one side
+        let isAccessible = false;
+        
+        // Check all four directions
+        const directions = [
+          {dr: -1, dc: 0}, // up
+          {dr: 1, dc: 0},  // down
+          {dr: 0, dc: -1}, // left
+          {dr: 0, dc: 1}   // right
+        ];
+        
+        for (const dir of directions) {
+          const newRow = row + dir.dr;
+          const newCol = col + dir.dc;
+          
+          // Check if the adjacent position is within bounds and is a path
+          if (newRow >= 0 && newRow < mazeRows && 
+              newCol >= 0 && newCol < mazeCols && 
+              mazeMap[newRow][newCol] === 0) {
+            isAccessible = true;
+            break;
           }
         }
-      } else {
-        aboveOpen = false;
-      }
-      if (row + scale < mazeRows - scale + 1) {
-        for (let dr = 0; dr < scale; dr++) {
-          for (let dc = 0; dc < scale; dc++) {
-            if (mazeMap[row + scale + dr][col + dc] !== 0) belowOpen = false;
-          }
+        
+        if (isAccessible) {
+          eligiblePhotoWalls.push({ row, col });
         }
-      } else {
-        belowOpen = false;
-      }
-      // Only allow if both above and below are open corridors
-      if (aboveOpen && belowOpen) {
-        // Place photo wall at the center of this wall block
-        const centerRow = row + Math.floor(scale / 2);
-        const centerCol = col + Math.floor(scale / 2);
-        eligiblePhotoWalls.push({ row: centerRow, col: centerCol });
       }
     }
   }
@@ -345,25 +519,134 @@ function updateCameraPosition() {
   camera.lookAt(model.position.x, model.position.y + 1, model.position.z);
 }
 
-// Camera always rotates with mouse movement (no click needed)
+
+// Classic orbit: mouse drag to rotate camera
+canvas.addEventListener('mousedown', (e) => {
+  if (!gameStarted) return;
+  isDragging = true;
+  lastMouseX = e.clientX;
+  lastMouseY = e.clientY;
+  canvas.style.cursor = 'grabbing';
+});
+window.addEventListener('mouseup', () => {
+  isDragging = false;
+  canvas.style.cursor = '';
+});
 window.addEventListener('mousemove', (e) => {
-  const dx = e.movementX || e.mozMovementX || e.webkitMovementX || 0;
-  const dy = e.movementY || e.mozMovementY || e.webkitMovementY || 0;
+  if (!isDragging) return;
+  const dx = e.clientX - lastMouseX;
+  const dy = e.clientY - lastMouseY;
+  lastMouseX = e.clientX;
+  lastMouseY = e.clientY;
   camOrbitAngle -= dx * 0.01;
   camOrbitVAngle -= dy * 0.01;
 });
 
 
+
 // Disable zooming with mouse wheel
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  // Optionally allow zooming:
+  // camOrbitRadius = Math.max(2, Math.min(12, camOrbitRadius + e.deltaY * 0.01));
+}, { passive: false });
 // Set camera to maximum close by default
-camOrbitRadius = 2;
+camOrbitRadius = 5;
 
 scene.add(new THREE.HemisphereLight(0xffffee, 0x444444, 1));
 const dirLight = new THREE.DirectionalLight(0xffffff, 1);
 dirLight.position.set(5, 10, 5);
 scene.add(dirLight);
 
-addMaze();
+
+
+// Only start animation/game loop after menu
+function mainAnimate() {
+  requestAnimationFrame(mainAnimate);
+  // Only run game logic if gameStarted
+  if (!gameStarted) {
+    // Render char preview if visible (handled in showCharPreview)
+    return;
+  }
+  gameLoop();
+}
+mainAnimate();
+
+// Single game loop for all in-game logic and rendering
+function gameLoop() {
+  const delta = clock.getDelta();
+  if (mixer) mixer.update(delta);
+
+  // Movement (classic: WASD/arrow keys, camera follows, smooth)
+  if (model && pressed.size > 0) {
+    const up = pressed.has('ArrowUp');
+    const down = pressed.has('ArrowDown');
+    const left = pressed.has('ArrowLeft');
+    const right = pressed.has('ArrowRight');
+    let angleOffset = null;
+    if (up && !down && !left && !right) angleOffset = 0;
+    else if (down && !up && !left && !right) angleOffset = Math.PI;
+    else if (left && !right && !up && !down) angleOffset = Math.PI / 2;
+    else if (right && !left && !up && !down) angleOffset = -Math.PI / 2;
+    else if (up && left && !right && !down) angleOffset = Math.PI / 4;
+    else if (up && right && !left && !down) angleOffset = -Math.PI / 4;
+    else if (down && left && !right && !up) angleOffset = (3 * Math.PI) / 4;
+    else if (down && right && !left && !up) angleOffset = (-3 * Math.PI) / 4;
+    if (angleOffset === null) angleOffset = 0;
+    moveAngle = camOrbitAngle + angleOffset;
+    const moveDir = new THREE.Vector3(0, 0, -1);
+    moveDir.applyAxisAngle(new THREE.Vector3(0, 1, 0), moveAngle);
+    moveDir.normalize();
+    const nextPos = model.position.clone().add(moveDir.clone().multiplyScalar(mazeTileSize * 0.4));
+    const gridX = Math.round((nextPos.x + (mazeCols * mazeTileSize) / 2 - mazeTileSize / 2) / mazeTileSize);
+    const gridZ = Math.round((nextPos.z + (mazeRows * mazeTileSize) / 2 - mazeTileSize / 2) / mazeTileSize);
+    let canMove = true;
+    if (
+      gridZ >= 0 && gridZ < mazeRows &&
+      gridX >= 0 && gridX < mazeCols &&
+      mazeMap[gridZ][gridX] === 1
+    ) {
+      canMove = false;
+    }
+    model.rotation.y = moveAngle + modelBaseRotation;
+    if (canMove) {
+      moveDir.multiplyScalar(moveSpeed * delta);
+      model.position.add(moveDir);
+    }
+  }
+
+  // Jump
+  if (model && isJumping) {
+    velocityY += gravity * delta;
+    model.position.y += velocityY * delta;
+    if (model.position.y <= groundY) {
+      model.position.y = groundY;
+      velocityY = 0;
+      isJumping = false;
+    }
+  }
+
+  // Proximity checks
+  checkDoorProximity();
+
+  // Camera
+  updateCameraPosition();
+  renderer.render(scene, camera);
+
+  // Minimap
+  drawMinimap();
+
+
+  // Camera auto-follow: smoothly rotate camera to stay behind the character
+  if (model && pressed.size > 0) {
+    const lerpSpeed = 0.08;
+    let targetAngle = moveAngle;
+    let deltaAngle = targetAngle - camOrbitAngle;
+    while (deltaAngle > Math.PI) deltaAngle -= 2 * Math.PI;
+    while (deltaAngle < -Math.PI) deltaAngle += 2 * Math.PI;
+    camOrbitAngle += deltaAngle * lerpSpeed;
+  }
+}
 
 let model, mixer;
 let runAction, currentAction;
@@ -466,11 +749,7 @@ window.addEventListener('keydown', e => {
     velocityY = jumpPower;
   }
 
-  // Door open action
-  if (e.code === 'KeyF' && doorActionDiv.style.display === 'block' && nearestDoor) {
-    openDoor(nearestDoor);
-    doorActionDiv.style.display = 'none';
-  }
+
 
   // Photo wall reveal action
   if (e.code === 'KeyF' && photoWallActionDiv.style.display === 'block' && nearestPhotoWall) {
@@ -510,11 +789,9 @@ window.addEventListener('keyup', e => {
 
 
 // Door logic (not used in maze mode)
-let nearestDoor = null;
 let nearestPhotoWall = null;
 function checkDoorProximity() {
-  doorActionDiv.style.display = 'none';
-  // Photo wall proximity
+  // Only handle photo wall proximity (no doorActionDiv)
   nearestPhotoWall = getNearestPhotoWall();
   if (nearestPhotoWall) {
     photoWallActionDiv.style.display = 'block';
@@ -522,7 +799,6 @@ function checkDoorProximity() {
     photoWallActionDiv.style.display = 'none';
   }
 }
-function openDoor(door) {}
 
 let coins = [];
 let score = 0;
@@ -563,81 +839,7 @@ function checkCoinCollection() {
 
 //addCoins(15); // Отключаем монеты для коридора
 
-function animate() {
-  requestAnimationFrame(animate);
-  const delta = clock.getDelta();
-  if (mixer) mixer.update(delta);
-
-  // Движение модели
-  if (model && pressed.size > 0) {
-    // Determine which direction(s) are currently pressed
-    const up = pressed.has('ArrowUp');
-    const down = pressed.has('ArrowDown');
-    const left = pressed.has('ArrowLeft');
-    const right = pressed.has('ArrowRight');
-    let angleOffset = null;
-    if (up && !down && !left && !right) angleOffset = 0;
-    else if (down && !up && !left && !right) angleOffset = Math.PI;
-    else if (left && !right && !up && !down) angleOffset = Math.PI / 2;
-    else if (right && !left && !up && !down) angleOffset = -Math.PI / 2;
-    else if (up && left && !right && !down) angleOffset = Math.PI / 4;
-    else if (up && right && !left && !down) angleOffset = -Math.PI / 4;
-    else if (down && left && !right && !up) angleOffset = (3 * Math.PI) / 4;
-    else if (down && right && !left && !up) angleOffset = (-3 * Math.PI) / 4;
-    // Default to forward if something goes wrong
-    if (angleOffset === null) angleOffset = 0;
-
-    // Calculate intended next position
-    const moveDir = new THREE.Vector3(0, 0, -1);
-    moveDir.applyAxisAngle(new THREE.Vector3(0, 1, 0), camOrbitAngle + angleOffset);
-    moveDir.normalize();
-    const nextPos = model.position.clone().add(moveDir.clone().multiplyScalar(mazeTileSize * 0.4));
-
-    // Convert world position to maze grid
-    const gridX = Math.round((nextPos.x + (mazeCols * mazeTileSize) / 2 - mazeTileSize / 2) / mazeTileSize);
-    const gridZ = Math.round((nextPos.z + (mazeRows * mazeTileSize) / 2 - mazeTileSize / 2) / mazeTileSize);
-
-    // Check for wall collision
-    let canMove = true;
-    if (
-      gridZ >= 0 && gridZ < mazeRows &&
-      gridX >= 0 && gridX < mazeCols &&
-      mazeMap[gridZ][gridX] === 1
-    ) {
-      canMove = false;
-    }
-
-    // Always face the direction, even if can't move
-    model.rotation.y = camOrbitAngle + angleOffset + modelBaseRotation;
-
-    if (canMove) {
-      moveDir.multiplyScalar(moveSpeed * delta);
-      model.position.add(moveDir);
-    }
-  }
-
-  // Прыжок
-  if (model && isJumping) {
-    velocityY += gravity * delta;
-    model.position.y += velocityY * delta;
-
-    if (model.position.y <= groundY) {
-      model.position.y = groundY;
-      velocityY = 0;
-      isJumping = false;
-    }
-  }
-
-
-  //checkCoinCollection(); // Отключаем монеты для коридора
-
-  checkDoorProximity();
-
-  // Камера следует за мышью
-  updateCameraPosition();
-  renderer.render(scene, camera);
-}
-animate();
+// (Removed duplicate animate loop)
 
 // Шахматный пол
 function addChessFloor(tileSize = 1, tilesX = 20, tilesZ = 20) {
