@@ -107,6 +107,19 @@ photoCounterDiv.style.zIndex = '10';
 photoCounterDiv.textContent = 'Photos: 0/0';
 document.body.appendChild(photoCounterDiv);
 
+// Add step counter UI
+let stepCounterDiv = document.createElement('div');
+stepCounterDiv.style.position = 'absolute';
+stepCounterDiv.style.top = '10px';
+stepCounterDiv.style.left = '10px';
+stepCounterDiv.style.fontFamily = 'sans-serif';
+stepCounterDiv.style.fontSize = '24px';
+stepCounterDiv.style.color = '#fff';
+stepCounterDiv.style.textShadow = '1px 1px 2px #000';
+stepCounterDiv.style.zIndex = '10';
+stepCounterDiv.textContent = 'Steps: 0';
+document.body.appendChild(stepCounterDiv);
+
 // Hide game UI initially (before redefining setGameUIVisible)
 setGameUIVisible(false);
 
@@ -114,7 +127,8 @@ setGameUIVisible(false);
 setGameUIVisible = function(visible) {
   if (typeof minimapCanvas !== 'undefined' && minimapCanvas) minimapCanvas.style.display = visible ? '' : 'none';
   if (typeof photoCounterDiv !== 'undefined' && photoCounterDiv) photoCounterDiv.style.display = visible ? '' : 'none';
-  // Only hide photoWallActionDiv if it is already defined
+  if (typeof stepCounterDiv !== 'undefined' && stepCounterDiv) stepCounterDiv.style.display = visible ? '' : 'none';
+  if (typeof speechBubbleDiv !== 'undefined' && speechBubbleDiv) speechBubbleDiv.style.display = visible ? '' : 'none';
   if (typeof photoWallActionDiv !== 'undefined' && photoWallActionDiv) photoWallActionDiv.style.display = 'none';
   const scoreDiv = document.getElementById('score');
   if (scoreDiv) scoreDiv.style.display = visible ? '' : 'none';
@@ -381,7 +395,14 @@ function addMaze() {
   }
 
   // Walls with optional photo textures (hidden by question.png)
-  const wallMat = new THREE.MeshStandardMaterial({ color: 0x444444 });
+  const wallTexture = new THREE.TextureLoader().load('/photos/wall.png');
+  wallTexture.wrapS = wallTexture.wrapT = THREE.RepeatWrapping;
+  wallTexture.repeat.set(2, 2); // Adjust texture tiling
+  const wallMat = new THREE.MeshStandardMaterial({ 
+    map: wallTexture,
+    roughness: 0.7,
+    metalness: 0.1
+  });
   const questionTexture = new THREE.TextureLoader().load('/photos/question.png');
   let photoTextures = photoFileNames.map(f => {
     const tex = new THREE.TextureLoader().load('/photos/' + f);
@@ -573,6 +594,25 @@ function gameLoop() {
     if (canMove) {
       moveDir.multiplyScalar(moveSpeed * delta);
       model.position.add(moveDir);
+      
+      // Check if moved enough to count as a step
+      const distanceMoved = model.position.distanceTo(lastStepPosition);
+      if (distanceMoved >= mazeTileSize * 0.5) { // Count a step after moving half a tile
+        stepCount++;
+        stepCounterDiv.textContent = `Steps: ${stepCount}`;
+        lastStepPosition.copy(model.position);
+        
+        // Show messages at specific intervals
+        if (stepCount % 500 === 0) {
+          // Show drink message every 500 steps
+          const drinkMessage = messages.drink[Math.floor(Math.random() * messages.drink.length)];
+          showMessage(drinkMessage);
+        } else if (stepCount % 100 === 0) {
+          // Show regular message every 100 steps
+          const regularMessage = messages.regular[Math.floor(Math.random() * messages.regular.length)];
+          showMessage(regularMessage);
+        }
+      }
     }
   }
 
@@ -596,6 +636,9 @@ function gameLoop() {
 
   // Minimap
   drawMinimap();
+
+  // Update speech bubble position
+  updateSpeechBubble();
 }
 
 let model, mixer;
@@ -616,6 +659,10 @@ const baseMoveSpeed = 3;
 const sprintMoveSpeed = 7;
 let moveSpeed = baseMoveSpeed;
 
+// Add step counter variable
+let stepCount = 0;
+let lastStepPosition = new THREE.Vector3();
+
 // Загрузка модели
 new GLTFLoader().load('/OlegRunning.glb', gltf => {
   model = gltf.scene;
@@ -628,6 +675,7 @@ new GLTFLoader().load('/OlegRunning.glb', gltf => {
   groundY = -modelMinY;
   model.position.y = groundY;
   model.rotation.y = modelBaseRotation;
+  lastStepPosition.copy(model.position);
 
   mixer = new THREE.AnimationMixer(model);
 
@@ -872,3 +920,75 @@ fullSizePhotoDiv.addEventListener('click', (e) => {
     hideFullSizePhoto();
   }
 });
+
+// Add speech bubble UI
+let speechBubbleDiv = document.createElement('div');
+speechBubbleDiv.style.position = 'absolute';
+speechBubbleDiv.style.padding = '10px 20px';
+speechBubbleDiv.style.background = 'rgba(255, 255, 255, 0.9)';
+speechBubbleDiv.style.borderRadius = '15px';
+speechBubbleDiv.style.color = '#000';
+speechBubbleDiv.style.fontSize = '18px';
+speechBubbleDiv.style.fontFamily = 'sans-serif';
+speechBubbleDiv.style.display = 'none';
+speechBubbleDiv.style.zIndex = '1000';
+speechBubbleDiv.style.textAlign = 'center';
+speechBubbleDiv.style.maxWidth = '300px';
+speechBubbleDiv.style.boxShadow = '0 2px 10px rgba(0,0,0,0.2)';
+document.body.appendChild(speechBubbleDiv);
+
+// Messages for different step intervals
+const messages = {
+  regular: [
+    "Где я? Что это за место?",
+    "Я должен найти выход отсюда...",
+    "Столько фотографий... Что они означают?",
+    "Почему я здесь?",
+    "Нужно осмотреться получше",
+    "Интересно, есть ли здесь другие люди?",
+    "Я устал... Но нужно идти дальше",
+    "Странное место...",
+    "Должно быть, здесь есть подсказки",
+    "Я заперт в этой игре..."
+  ],
+  drink: [
+    "СРОЧНО НУЖНО ВЫПИТЬ!!!",
+    "НЕМЕДЛЕННО ТРЕБУЕТСЯ ВОДКА!!!",
+    "ПОМОГИТЕ, МНЕ СРОЧНО НУЖНО ВЫПИТЬ!!!",
+    "Я УМРУ БЕЗ ВОДКИ ПРЯМО СЕЙЧАС!!!",
+    "ВЫПИТЬ НУЖНО НЕМЕДЛЕННО!!!"
+  ]
+};
+
+let lastMessageStep = 0;
+let messageTimeout = null;
+
+function showMessage(message) {
+  speechBubbleDiv.textContent = message;
+  speechBubbleDiv.style.display = 'block';
+  
+  // Clear any existing timeout
+  if (messageTimeout) {
+    clearTimeout(messageTimeout);
+  }
+  
+  // Hide message after 5 seconds
+  messageTimeout = setTimeout(() => {
+    speechBubbleDiv.style.display = 'none';
+  }, 5000);
+}
+
+function updateSpeechBubble() {
+  if (!model) return;
+  
+  // Convert 3D position to screen coordinates
+  const vector = model.position.clone();
+  vector.y += 3; // Position above character's head
+  vector.project(camera);
+  
+  const x = (vector.x * 0.5 + 0.5) * window.innerWidth;
+  const y = (-vector.y * 0.5 + 0.5) * window.innerHeight;
+  
+  speechBubbleDiv.style.left = `${x - speechBubbleDiv.offsetWidth / 2}px`;
+  speechBubbleDiv.style.top = `${y - 50}px`;
+}
